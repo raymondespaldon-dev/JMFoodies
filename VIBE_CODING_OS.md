@@ -14,12 +14,12 @@
 | Evidence | Finding |
 |---|---|
 | `npm run build` | ✅ Passes — 59 modules, built in ~3.3s |
-| Git | `main`, **1 commit** (`6b370df Initial commit`), 3 docs untracked |
+| Git | `feat/booking-hardening`, baseline committed as `c35bd07` on top of `6b370df Initial commit` |
 | Frontend | `src/main.js` = 75 KB monolith, 18 KB CSS |
 | Database | 4 SQL files, RLS on every table, triggers exist |
 | Booking write | `main.js:283` prices the booking **in the browser**, then `:286` inserts the booking and `:287-288` inserts menu items as a **second request** |
 | Atomic RPC | ❌ No `create_booking` function in `database/02_functions.sql` |
-| Build routes | ❌ `account.html`, `my-bookings.html`, `notifications.html`, `admin/cancellation-requests.html` exist but are **missing from `vite.config.js` rollup inputs** |
+| Build routes | ✅ **Fixed in `59b201d`** — all 16 pages build (63 modules) |
 | Tests | ❌ None |
 | Docs | ✅ Reverse-engineering spec + 8-slice AppDeploy playbook already written |
 
@@ -34,7 +34,7 @@ Phase 3.5 Baseline audit (brownfield) ... DONE (reverse-engineering doc)
 Phase 4  Workspace & tracking .......... PARTIAL (no worktrees, no story ledger)
 Phase 5  Design ........................ PARTIAL (UI exists, no design-system pass)
 Phase 6  Build ......................... ▶ YOU ARE HERE
-           Slice 1 Foundation .......... ~90% (build passes, 4 routes missing)
+           Slice 1 Foundation .......... DONE (16/16 pages build, 63 modules)
            Slice 2 DB / RLS ............ ~80% (written, untested)
            Slice 3 Secure booking core . 0%  ← THE CRITICAL DOOR
 Phase 7  Review ........................ NOT STARTED
@@ -467,10 +467,14 @@ From the reverse-engineering spec — answer these before Step 10:
 ## 10. What to do right now
 
 ```
-1. Run Step 1 (commit baseline, branch).
-2. Run Step 2 with Antigravity Beam 1.0 high → SLICE_3_SPEC.md.
-3. Run Step 3 with opencode free → fix the 4 build routes.
-4. Only then start Orca Run B (db + web + build workers).
+1. ✅ Step 1 done — baseline `c35bd07`, branch `feat/booking-hardening`.
+2. ▶ Step 2 — run this with Antigravity Beam 1.0 high → SLICE_3_SPEC.md. THIS IS THE ONLY BLOCKER.
+3. ✅ Step 3 done — `59b201d`, 16/16 pages in dist/.
+4. After Step 2 is frozen: Orca Run B (slice3-db + slice3-web only; slice1-build is no longer needed).
 ```
+
+**Paste-ready prompt for Antigravity** (Run A — the Brain). Copy the spec from Section 4 verbatim; it already contains the file list, the required contract, and the "do not edit app code" guard.
+
+**After that:** reply here with `SLICE_3_SPEC.md` on disk and say "spec frozen". I will generate the `.orca/specs/` worker files and start Run B.
 
 Everything else can wait. The single highest-value action is **Step 2**, because every worker after it depends on that frozen contract.
