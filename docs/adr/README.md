@@ -4,7 +4,7 @@ Numbered decisions with context, alternatives, and consequences. One file per de
 
 | # | Decision | Status | Date |
 |---|---|---|---|
-| 0001 | [Atomic booking RPC](0001-atomic-booking-rpc.md) | proposed | — |
+| 0001 | [Atomic booking RPC](0001-atomic-booking-rpc.md) | accepted | 2026-11-23 |
 
 ## Format
 
