@@ -60,6 +60,13 @@ If you only remember one thing, remember this sequence:
 
 Everything else in this file is a conditional branch off this spine.
 
+### Two amendments for brownfield projects
+
+The spine above assumes a greenfield build. If the repo already has code, two changes are required:
+
+- **Phase 3.5 — Baseline audit.** Before planning changes to code that already exists, reverse-engineer what is there. Skip it and the plan describes a system that does not exist, and every worker implements fiction.
+- **Phase 6 is a loop, not a block.** One phase = many slices. Every slice runs the same six stages: *freeze contract → failing test → implement → review → verify → commit.*
+
 ---
 
 # THE CHRONOLOGICAL PIPELINE
@@ -135,6 +142,34 @@ Everything else in this file is a conditional branch off this spine.
 
 ---
 
+## PHASE 3.5 — Baseline audit (brownfield only)
+
+**Trigger:** the repo already contains working code. Skip this phase only if you started from an empty directory.
+
+Without it you plan against an imagined codebase. The audit produces the evidence that every later phase cites.
+
+### `brownfield-retrospective` — CORE for inherited code
+- **Why:** Runs the process retroactively: audits current state, reconstructs past decisions, and produces a four-axis gap register (thinking, coding practice, missing features, tech selection).
+- **Output:** A gap register plus the fixes to execute forward through the normal pipeline.
+- **Gate:** You can name every gap that will bite before launch, and which slice closes it.
+
+### `codebase-onboarding` — CORE for an unfamiliar repo
+- **Why:** Produces an architecture map, key entry points, conventions, and a starter `CLAUDE.md`/`AGENTS.md`, so agents stop fighting the existing style.
+- **Output:** Onboarding guide + agent instruction file.
+
+### `reverse-engineer-anything` — CONDITIONAL
+- **Trigger:** Behavior must be recovered from shipped artifacts rather than readable source (bundles, binaries, firmware).
+- **Why:** Not needed for a normal source repo; use `brownfield-retrospective` instead.
+
+### Phase 3.5 gate
+- Build runs and its output is recorded.
+- Every page/route is enumerated and the ones missing from the build are listed.
+- Every write path is traced, including whether the client or server owns validation and pricing.
+- Deploy-blocking defects are written down with file:line evidence.
+- The findings go into a durable document, not into chat history.
+
+---
+
 ## PHASE 4 — Workspace & tracking
 
 ### `using-git-worktrees` — CORE for non-trivial work
@@ -175,9 +210,21 @@ Everything else in this file is a conditional branch off this spine.
 
 ---
 
-## PHASE 6 — Build loop (repeat per story/feature)
+## PHASE 6 — Build loop (repeat per slice)
 
-Run this loop for each item in the plan.
+Run this loop for each item in the plan. The phase is not a block of time; it is this loop executed N times.
+
+```
+for each slice:
+  1. freeze contract   (Brain)      — input/output shapes, error codes, test list. Workers may not change it.
+  2. failing test      (Hands)      — red before green, always.
+  3. implement         (Hands)      — smallest change that makes the test pass.
+  4. review            (Reviewer)   — read-only diff review against the frozen contract.
+  5. verify            (Hands+Eyes) — build, tests, browser pass; evidence, not assertion.
+  6. commit            (Hands)      — conventional commit, small, one behavior.
+```
+
+**Slice gate:** no slice advances with an open P0/P1 finding or an unrun test. A slice that "mostly works" is not done.
 
 ### `test-driven-development` — CORE
 - **Why:** Write the failing test first, watch it fail, make the smallest change to green, then refactor. Prevents code written to satisfy an imagined requirement.

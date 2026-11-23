@@ -176,14 +176,18 @@ Do **not** spend the high window on planning. Planning is Antigravity's job and 
 
 ### Preconditions (do these first)
 
-- [ ] Baseline committed (Step 1 below).
-- [ ] `SLICE_3_SPEC.md` frozen by the Brain (Step 2).
+- [x] Baseline committed (Step 1) — `c35bd07`, branch `feat/booking-hardening`.
+- [ ] `SLICE_3_SPEC.md` frozen by the Brain (Step 2) — **only missing item.**
+- [x] Worker spec files written — `.orca/specs/slice3-contract.md`, `slice3-db.md`, `slice3-web.md`, `review.md`.
+- [x] Launcher written — `scripts/run-run-b.ps1`.
+- [x] Project rules written — `AGENTS.md` (all agents inherit these).
+- [ ] `SUPABASE_DB_URL` set for a **staging** database — without it `slice3-db` writes tests it cannot run.
 - [ ] Each worker owns different files — no shared edits.
 - [ ] No worker touches `.env` or production Supabase.
 
 Orca is running and reachable (verified): `orca status --json` → `runtime.state: ready`.
 
-Available agent IDs (verified): `codex`, `antigravity`, `opencode`.
+Available agent IDs (verified with `orca agent installed`): `claude`, `codex`, `opencode`, `opencode2`, `antigravity`, `freebuff`.
 
 ### Run A — Brain writes the contract (1 worker, current worktree)
 
@@ -515,26 +519,81 @@ Run `/configure-ecc` and request those; do not install the full 34-module profil
 
 From the reverse-engineering spec — answer these before Step 10:
 
-- [ ] Currency and timezone (UI formats PHP; confirm).
-- [ ] Minimum booking notice (seed says 3 days; code does not enforce).
-- [ ] Must customers sign in to book? (source says yes; confirm).
-- [ ] Which status transitions may an admin perform?
-- [ ] Is the first release staging-only or real customers?
-- [ ] Deposits / online payment in scope now? (default: no)
+- [x] **Currency and timezone:** PHP (₱), app display Asia/Manila, timestamps stored UTC. *(UI already formats PHP; confirm no other locale needed.)*
+- [x] **Minimum booking notice:** 3 calendar days, enforced **server-side** in the booking request and surfaced in the UI. *(Seed and UI already say 3 days — the code just needs the same rule so they stop disagreeing.)*
+- [x] **Sign-in required?** Yes — customers create an account to book. *(Lets them view/cancel their own bookings and avoids duplicate/guest records; guest booking with an emailed manage-link is the fallback if you want fewer steps.)*
+- [x] **Admin status transitions:** `pending → confirmed → completed`; `pending/confirmed → cancelled` (admin-only, requires a reason, logs actor + timestamp). No un-cancel, no `completed → confirmed`. *(Explicit state machine stops admins from creating nonsense states; the audit log answers "who changed this?")*
+- [x] **First release audience:** Staging/demo only. *(Real customers only after these decisions and payments are settled; small pilot if you need real users sooner.)*
+- [x] **Deposits / online payment:** Out of scope for v1 — pay on arrival; payment tables stay unused. *(Confirms the "default: no"; add payments as a separate step once the booking flow is stable.)*
+
+**Rule:** where the spec, code and seed disagree (notice period, sign-in), the decision above is the source of truth — update all three in the same change so they can't drift again.
 
 ---
+## 10. Your first move
 
-## 10. What to do right now
+Everything is prepared. One artifact is missing: the frozen contract.
+
+### What now exists
+
+| Artifact | Purpose | Status |
+|---|---|---|
+| `AGENTS.md` | Rules every agent inherits: no client price, no two-request booking, no RLS weakening, no invented business rules | ✅ |
+| `.orca/specs/slice3-contract.md` | The Brain's task — the only thing standing between you and Run B | ✅ |
+| `.orca/specs/slice3-db.md` | `slice3-db` worker spec (freebuff) | ✅ |
+| `.orca/specs/slice3-web.md` | `slice3-web` worker spec (opencode) | ✅ |
+| `.orca/specs/review.md` | Read-only reviewer spec (codex) | ✅ |
+| `scripts/run-run-b.ps1` | Parallel launcher with precondition checks | ✅ |
+| `scripts/db-test.mjs` + `npm run test:db` | SQL test runner; rolls every test back | ✅ (unverified — no DB URL yet) |
+| `HANDOFF.md` | Resume state for any session or worker | ✅ |
+| `docs/adr/README.md` | ADR index | ✅ |
+| `SLICE_3_SPEC.md` | **The frozen contract** | ❌ **missing** |
+
+### Step 1 — the one thing to do
+
+**Option A — one Orca command (no copy-paste):**
+
+```powershell
+orca orchestration worker-start --environment local --spec-file .orca/specs/slice3-contract.md --worktree current --agent antigravity
+```
+
+**Option B — paste into the Antigravity app:**
+
+```text
+Read .orca/specs/slice3-contract.md and execute it exactly.
+Produce SLICE_3_SPEC.md and docs/adr/0001-atomic-booking-rpc.md.
+Do not edit application code.
+```
+
+That is the whole task. The spec file already carries the file list, the required contract, the error codes, the test list, the infrastructure constraint (no Docker/psql — tests must fit `npm run test:db`), and the "invent nothing, list unknowns" rule. You are not prompting from scratch.
+
+### Step 2 — the gate, before you accept it
+
+Do not start Run B until all of these are true:
+
+- [ ] Input and output shapes are unambiguous — two developers would write the same RPC.
+- [ ] Exactly one price authority: the SQL function. Nothing in the payload can change the total.
+- [ ] Every error code has a user-facing message.
+- [ ] Every acceptance criterion is executable as a test in `database/tests/`.
+- [ ] "Open decisions" exists and contains no guess that a worker would have to resolve mid-implementation.
+
+Then: `git add SLICE_3_SPEC.md docs/adr && git commit -m "docs: freeze slice 3 booking contract"`. A frozen spec that is not committed will drift.
+
+### Step 3 — Run B (only after the gate passes)
+
+```powershell
+.\scripts\run-run-b.ps1
+```
+
+Confirm the Freebuff high window is open first — the script warns you, it cannot check the quota. Then **end your turn**; Orca wakes you when the workers report.
+
+### The one infrastructure gap
+
+There is no `supabase` CLI, no `docker`, and no `psql` on this machine, and `.env` has no `SUPABASE_DB_URL`. So the SQL tests can be **written** but not **executed** yet.
+
+To close it, add a direct connection string for a staging database to `.env`:
 
 ```
-1. ✅ Step 1 done — baseline `c35bd07`, branch `feat/booking-hardening`.
-2. ▶ Step 2 — run this with Antigravity Beam 1.0 high → SLICE_3_SPEC.md. THIS IS THE ONLY BLOCKER.
-3. ✅ Step 3 done — `59b201d`, 16/16 pages in dist/.
-4. After Step 2 is frozen: Orca Run B (slice3-db + slice3-web only; slice1-build is no longer needed).
+SUPABASE_DB_URL=postgresql://postgres.<ref>:<password>@<host>:5432/postgres
 ```
 
-**Paste-ready prompt for Antigravity** (Run A — the Brain). Copy the spec from Section 4 verbatim; it already contains the file list, the required contract, and the "do not edit app code" guard.
-
-**After that:** reply here with `SLICE_3_SPEC.md` on disk and say "spec frozen". I will generate the `.orca/specs/` worker files and start Run B.
-
-Everything else can wait. The single highest-value action is **Step 2**, because every worker after it depends on that frozen contract.
+Then `npm run test:db -- --check` tells you immediately whether it works. Do not use the production database. If you cannot get a staging connection string, the honest fallback is: `slice3-db` writes the tests, marks them **unverified**, and Step 4's gate stays open — that is better than a green tick you cannot defend.
