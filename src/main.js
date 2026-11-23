@@ -250,6 +250,60 @@ async function renderMenu(){const area=document.querySelector('#menuarea');if(!c
 }
 function priceData(){const extras=[...selections].map(id=>foodItems.find(x=>x.id===id)).filter(Boolean);return {extras:extras.reduce((s,x)=>s+Number(x.extra_price||0),0),items:extras};}
 function renderSummary(){if(!currentPackage)return;const {extras,items}=priceData(),per=Number(currentPackage.price_per_person)+extras,guests=Number(document.querySelector('[name=guest_count]')?.value||0);document.querySelector('#summary').innerHTML=`<div class="sumline"><span>${esc(currentPackage.name)}</span><b>${money(currentPackage.price_per_person)}</b></div><div class="sumline"><span>Food upgrades / person</span><b>${money(extras)}</b></div><div class="sumline total"><span>Estimated / person</span><b>${money(per)}</b></div><div class="sumline"><span>Guests</span><b>${guests}</b></div><div class="sumline grand"><span>Estimated total</span><b>${money(per*guests)}</b></div><p class="tiny muted">${items.length} menu item(s) selected</p><ul class="selectedlist">${items.map(x=>`<li>${esc(x.name)} ${Number(x.extra_price)>0?`(+${money(x.extra_price)})`:''}</li>`).join('')}</ul>`;}
+const RPC_SQLSTATE_TO_CODE = {
+  '42501': 'UNAUTHENTICATED',
+  'P0001': 'MISSING_REQUIRED_FIELDS',
+  'P0010': 'INVALID_PACKAGE',
+  'P0011': 'PACKAGE_INACTIVE',
+  'P0012': 'GUESTS_BELOW_MINIMUM',
+  'P0002': 'EVENT_DATE_PAST',
+  'P0003': 'MINIMUM_NOTICE_NOT_MET',
+  'P0004': 'TIME_SLOT_UNAVAILABLE',
+  'P0005': 'TIME_SLOT_COLLISION',
+  'P0020': 'INVALID_FOOD_SELECTION',
+  'P0021': 'FOOD_ITEM_UNAVAILABLE',
+  'P0022': 'MENU_SELECTION_LIMIT_EXCEEDED',
+  'P0023': 'MENU_REQUIRED_CATEGORY_MISMATCH',
+  'P0024': 'FOOD_ITEM_NOT_IN_PACKAGE',
+  'P0030': 'PRICE_TAMPERING_ATTEMPT'
+};
+
+function extractRpcErrorCode(error, raw) {
+  const prefix = String(raw || '').match(/^([A-Z][A-Z0-9_]*)(?:\s*[:\s])/);
+  if (prefix && prefix[1]) return prefix[1];
+  if (error?.code && RPC_SQLSTATE_TO_CODE[error.code]) return RPC_SQLSTATE_TO_CODE[error.code];
+  return null;
+}
+
+function mapRpcErrorToMessage(error) {
+  const raw = String(error?.message || '');
+  const code = extractRpcErrorCode(error, raw);
+
+  const messages = {
+    UNAUTHENTICATED: 'Please sign in or create an account before submitting your booking.',
+    MISSING_REQUIRED_FIELDS: 'Please fill in all required event and contact fields.',
+    INVALID_PACKAGE: 'The selected package does not exist. Please re-select a package.',
+    PACKAGE_INACTIVE: 'The selected package is currently unavailable. Please choose another package.',
+    GUESTS_BELOW_MINIMUM: `This package requires at least ${currentPackage?.minimum_guests || ''} guests.`.trim(),
+    EVENT_DATE_PAST: 'Event date cannot be in the past.',
+    MINIMUM_NOTICE_NOT_MET: 'Bookings require at least 3 calendar days advance notice.',
+    TIME_SLOT_UNAVAILABLE: 'The selected date and time is blocked for catering. Please choose another time.',
+    TIME_SLOT_COLLISION: 'An approved reservation already exists at this exact time. Please select another time.',
+    INVALID_FOOD_SELECTION: 'One or more selected dishes could not be found. Please refresh your menu choices.',
+    FOOD_ITEM_UNAVAILABLE: 'One or more selected dishes are currently unavailable. Please adjust your menu.',
+    MENU_SELECTION_LIMIT_EXCEEDED: 'You selected more items than allowed for a menu category. Please adjust your menu.',
+    MENU_REQUIRED_CATEGORY_MISMATCH: 'Please select the required number of items for each menu category.',
+    FOOD_ITEM_NOT_IN_PACKAGE: 'One or more selected dishes are not offered by this package. Please adjust your menu.',
+    PRICE_TAMPERING_ATTEMPT: 'Invalid booking request. Pricing has been recalculated based on official menu rules.'
+  };
+
+  if (code && messages[code]) return messages[code];
+  for (const key of Object.keys(messages)) {
+    if (raw.includes(key)) return messages[key];
+  }
+  return 'We could not submit your booking. Please try again or contact JMFoodies.';
+}
+
 async function submitBooking(e){e.preventDefault();if(!currentPackage)return notify('Please choose a package.',true);const f=new FormData(e.currentTarget),guests=Number(f.get('guest_count')),minimum=Number(currentPackage.minimum_guests||1);if(guests<minimum)return notify(`This package requires at least ${minimum} guests.`,true);
 
 const { data: rules, error: rulesError } = await supabase
@@ -280,13 +334,13 @@ for (const rule of rules || []) {
 }
 
  const user=await getUser();if(!user){notify('Please sign in or create an account before submitting.',true);return;}
- const {extras,items}=priceData();const base=Number(currentPackage.price_per_person),extra=extras,per=base+extra,total=per*guests;
- const bookingRef='JM-'+Date.now().toString(36).toUpperCase();
- const payload={customer_id:user.id,booking_reference:bookingRef,package_id:currentPackage.id,full_name:f.get('full_name'),email:f.get('email'),phone:f.get('phone'),event_name:f.get('event_name'),event_type:f.get('event_type'),event_date:f.get('event_date'),event_time:f.get('event_time'),venue:f.get('venue'),guest_count:guests,base_price_per_person:base,extra_price_per_person:extra,final_price_per_person:per,estimated_total:total,special_requests:f.get('special_requests'),special_food_request:f.get('special_food_request'),menu_mode:mode,status:'pending'};
- const {data:booking,error}=await supabase.from('bookings').insert(payload).select().single();if(error)return notify(error.message,true);
- const details=items.map(x=>({booking_id:booking.id,food_item_id:x.id,item_name_snapshot:x.name,extra_price_snapshot:Number(x.extra_price||0),category_name_snapshot:categories.find(c=>c.id===x.category_id)?.name||''}));
- if(details.length){const {error:detailError}=await supabase.from('booking_food_items').insert(details);if(detailError){notify('Booking saved but menu details could not be saved. Contact JMFoodies with reference '+bookingRef+'.',true);return;}}
- location.href='/track-booking.html?ref='+encodeURIComponent(bookingRef);
+ // Client-side estimate for display only; never sent as billable total.
+ const {extras}=priceData();const base=Number(currentPackage.price_per_person),extra=extras,per=base+extra,total=per*guests;
+ const selected_food_item_ids=[...selections];
+ const payload={package_id:currentPackage.id,full_name:f.get('full_name'),email:f.get('email'),phone:f.get('phone'),event_name:f.get('event_name'),event_type:f.get('event_type'),event_date:f.get('event_date'),event_time:f.get('event_time'),venue:f.get('venue'),guest_count:guests,menu_mode:mode,selected_food_item_ids,special_requests:f.get('special_requests')||null,special_food_request:f.get('special_food_request')||null};
+ const {data,error}=await supabase.rpc('create_booking',{payload});
+ if(error){notify(mapRpcErrorToMessage(error),true);return;}
+ location.href='/track-booking.html?ref='+encodeURIComponent(data.booking_reference);
 }
 
 async function trackPage(){
