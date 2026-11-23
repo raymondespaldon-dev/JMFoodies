@@ -1,9 +1,9 @@
 # JMFoodies — Slice 3 State (verified 2026-11-23)
 
 **Branch:** `feat/booking-hardening`
-**Tip:** `f44b59b`
-**Review verdict:** SHIP (no P0/P1) — *code-reviewed, tests unverified (no staging DB)*
-**SQL test execution:** pending `SUPABASE_DB_URL` in `.env`
+**Tip:** `239792f`
+**Review verdict:** SHIP (no P0/P1) — *code-reviewed + SQL tests passing + Run C P1/P2 fixed*
+**SQL test execution:** ✅ 20/20 pass against staging DB
 **Open next-slice items:** missing tables/RLS + admin search injection (S3-04, S3-06)
 
 ## Merged artifacts
