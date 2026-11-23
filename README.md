@@ -4,7 +4,7 @@ A Vite + vanilla JavaScript + Supabase starter implementation for the JMFoodies 
 
 For step-by-step operator instructions (setup, dev server, SQL tests, build verification, deployment and admin bootstrap), see [docs/runbook.md](docs/runbook.md).
 
-> **Honest implementation note:** this is a functional foundation, not a fully production-certified catering platform. Before taking live payments or relying on it for real bookings, review the security and database notes below and complete the verification checklist. In particular, the browser calculates the estimate for display; the current SQL constraints validate arithmetic consistency but do not yet recompute package/menu pricing from authoritative rows in a database-side booking RPC. Add that server-side validation before production use.
+> **Honest implementation note:** this is a functional foundation, not a fully production-certified catering platform. The `create_booking` RPC now recomputes all prices server-side and writes atomically, but the SQL tests have not been executed (no staging `SUPABASE_DB_URL`). Before taking live bookings, add a staging connection string, run `npm run test:db`, and resolve the open security findings in `docs/security-audit.md`.
 
 ## Requirements
 - Node.js 20+ and npm
@@ -81,8 +81,8 @@ npm run test:db -- --check   # connectivity check only
 Requires `SUPABASE_DB_URL` in `.env` pointing at a **staging** database — never production, never committed. Each test file runs in a transaction that is rolled back. Tests that are written but not executed are unverified, not green. See [docs/runbook.md](docs/runbook.md) for details and current status.
 
 ## Before production
-- Implement database-side authoritative price and package/menu rule validation in a single transaction/RPC. Do not trust client-submitted prices.
-- Add server-side checks that selected food items are active, belong to an allowed category, satisfy required category counts and do not exceed limits.
+- ✅ Database-side authoritative price and package/menu rule validation in a single transaction/RPC (`create_booking`). Client-submitted prices are ignored.
+- ✅ Server-side checks that selected food items are active, belong to an allowed category, satisfy required category counts and do not exceed limits (enforced in `create_booking`).
 - Add alternative recommendation UI using `food_alternatives` and package inclusion data.
 - Implement full create/edit/deactivate workflows for packages, menu items, categories, alternatives, services and settings; current admin UI covers basic create/list for packages and food, plus booking status updates.
 - Implement customer booking edit/cancel flow and full status history display.

@@ -80,7 +80,7 @@ All 7 admin pages must be present and functional:
 - Full SEO / SSR (the app is client-side rendered)
 
 ## Honest implementation note
-This is a functional foundation, not a fully production-certified catering platform. Before taking live payments or relying on it for real bookings, review the security and database notes below and complete the verification checklist. In particular, the browser calculates the estimate for display; the current SQL constraints validate arithmetic consistency but do not yet recompute package/menu pricing from authoritative rows in a database-side booking RPC. Add that server-side validation before production use.
+This is a functional foundation, not a fully production-certified catering platform. The `create_booking` RPC now recomputes all prices server-side and writes atomically, but the SQL tests have not been executed (no staging `SUPABASE_DB_URL` yet). Before taking live bookings, add a staging connection string, run `npm run test:db`, and resolve the open security findings in `docs/security-audit.md` (S3-04 admin search injection, S3-06 server-side authorization verification).
 
 ## Verify your setup
 ```powershell

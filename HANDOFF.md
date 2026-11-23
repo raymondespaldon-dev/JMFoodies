@@ -5,7 +5,7 @@
 **Updated:** 2026-11-23
 **Branch:** `feat/booking-hardening`
 **Current slice:** Slice 3 — secure booking core → **MERGED, review SHIP**
-**Status:** merged at `a6be92b`; round-2 review **SHIP** (no P0/P1); SQL tests **written, NOT executed** (no `SUPABASE_DB_URL`)
+**Status:** merged at `f44b59b`; round-2 review **SHIP** (no P0/P1); SQL tests **written, NOT executed** (no `SUPABASE_DB_URL`)
 
 ---
 
@@ -23,7 +23,7 @@
 | Run C fixes | ✅ merged | frontend `61b8b75`; db `b89d077` |
 | Run C round 2 | ✅ **SHIP** | no P0/P1; price authority / atomicity / definer+caller binding / error codes / secret hygiene confirmed |
 | Security audit | ✅ merged | `docs/security-audit.md` (`d5c2976`) |
-| Operator runbook | ✅ merged | `docs/runbook.md` + README (`792b9c9`); refresh + RLS matrix in progress |
+| Operator runbook | ✅ merged | `docs/runbook.md` + README (`792b9c9`); refreshed with honest note + RLS matrix |
 | Merge of all worker branches | ✅ done | `a6be92b` (db, web-fix, docs, audit — disjoint files, clean) |
 | Build verification | ✅ green | `npm run build` 16/16 HTML, 63 modules, ~0.97s |
 | SQL test execution | ⏸ **pending gate** | `npm run test:db -- --check` exit 2: `SUPABASE_DB_URL` not set |
