@@ -4,8 +4,7 @@ declare
   v_pkg uuid;
   v_cat uuid;
   v_food uuid;
-  v_before integer;
-  v_after integer;
+  v_ref text;
 begin
   insert into auth.users (id, email) values (v_uid, 'test@example.com') on conflict (id) do nothing;
   insert into public.profiles (id, full_name, role) values (v_uid, 'Test Customer', 'customer') on conflict (id) do nothing;
@@ -24,13 +23,16 @@ begin
 
   -- inject failure on child insert
   create or replace function public._raise_on_bfi() returns trigger
-  language plpgsql as $$ begin raise exception 'injected child insert failure'; end; $$;
+  language plpgsql as $$
+  declare v_ref text;
+  begin
+    select booking_reference into v_ref from public.bookings where id = new.booking_id;
+    raise exception 'injected child insert failure: %', v_ref;
+  end; $$;
   create trigger _bfi_fail before insert on public.booking_food_items
   for each row execute function public._raise_on_bfi();
 
   perform set_config('request.jwt.claims', json_build_object('sub', v_uid, 'role', 'authenticated')::text, true);
-
-  select count(*) into v_before from public.bookings;
 
   begin
     perform public.create_booking(jsonb_build_object(
@@ -48,15 +50,20 @@ begin
     ));
     raise exception 'Assertion failed: create_booking should have raised';
   exception when others then
-    if position('injected child insert failure' in sqlerrm) = 0 then
-      -- allow any failure? require injected
+    if position('injected child insert failure:' in sqlerrm) = 0 then
       raise;
     end if;
+    v_ref := trim(substring(sqlerrm from 'injected child insert failure: (.*)'));
   end;
 
-  select count(*) into v_after from public.bookings;
-  if v_after <> v_before then
-    raise exception 'Assertion failed: parent booking persisted after child failure (% -> %)', v_before, v_after;
+  if v_ref is null or v_ref = '' then
+    raise exception 'Assertion failed: could not capture attempted booking reference';
+  end if;
+  if exists (select 1 from public.bookings where booking_reference = v_ref) then
+    raise exception 'Assertion failed: attempted booking % persisted after child failure', v_ref;
+  end if;
+  if exists (select 1 from public.booking_food_items bfi join public.bookings b on b.id = bfi.booking_id where b.booking_reference = v_ref) then
+    raise exception 'Assertion failed: attempted booking food items persisted for %', v_ref;
   end if;
 
   drop trigger if exists _bfi_fail on public.booking_food_items;
