@@ -1,0 +1,3 @@
+Follow-up: refresh your audit against the corrected baseline. Your worktree is now rebased onto feat/booking-hardening (da7606c), which includes the frozen SLICE_3_SPEC.md, AGENTS.md, and the MERGED slice3-web frontend (0e63608) that already calls create_booking and drops client price authority.
+
+Action: update docs/security-audit.md (the only file you own). For each finding, mark whether it is (a) already resolved by the merged frontend / frozen spec, (b) pending the slice3-db RPC (in progress in another worktree), or (c) still open. Cite spec/code lines. Remain read-only everywhere else. Commit only docs/security-audit.md. Never push.
