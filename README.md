@@ -2,6 +2,8 @@
 
 A Vite + vanilla JavaScript + Supabase starter implementation for the JMFoodies catering workflow. It includes a public package catalogue, authenticated customer booking flow, menu selection and per-person estimate, booking tracking by reference, and protected admin pages for bookings, packages, menu items and reports.
 
+For step-by-step operator instructions (setup, dev server, SQL tests, build verification, deployment and admin bootstrap), see [docs/runbook.md](docs/runbook.md).
+
 > **Honest implementation note:** this is a functional foundation, not a fully production-certified catering platform. Before taking live payments or relying on it for real bookings, review the security and database notes below and complete the verification checklist. In particular, the browser calculates the estimate for display; the current SQL constraints validate arithmetic consistency but do not yet recompute package/menu pricing from authoritative rows in a database-side booking RPC. Add that server-side validation before production use.
 
 ## Requirements
@@ -19,7 +21,7 @@ A Vite + vanilla JavaScript + Supabase starter implementation for the JMFoodies 
    - `database/02_functions.sql`
    - `database/03_policies.sql`
    - `database/04_seed.sql`
-6. In the terminal run `npm run dev` and open the local URL shown by Vite (normally http://localhost:5173).
+6. In the terminal run `npm run dev` and open the local URL shown by Vite (normally http://localhost:5173). If another Vite project already uses port 5173, pin a different one with `npm run dev -- --port 5174 --strictPort` and add that origin (e.g. `http://localhost:5174/**`) to the Supabase Auth redirect URLs.
 
 ## Supabase Auth
 1. In Authentication → Providers, enable Email.
@@ -57,6 +59,7 @@ This implementation accepts image URLs, so Supabase Storage is optional. If you 
 - `/admin/food-management.html`
 - `/admin/reports.html`
 - `/admin/settings.html`
+- `/admin/cancellation-requests.html`
 
 Admin access is checked against `profiles.role='admin'` and reinforced by RLS. Do not rely on the frontend check alone.
 
@@ -66,7 +69,16 @@ npm run build
 npm run preview
 ```
 
+The build must emit all 16 HTML pages into `dist/` (9 public pages plus the 7 admin pages listed above). Verify after building, e.g. in PowerShell: `(Get-ChildItem dist -Recurse -Filter *.html).Count` should print `16`.
+
 Deploy the generated `dist/` folder to a static host such as Netlify, Vercel or Cloudflare Pages. Set the same two Vite environment variables in the host's build settings. Add the deployed domain to Supabase Auth redirect URLs.
+
+## Database tests
+```bash
+npm run test:db              # run SQL tests in database/tests/ against staging
+npm run test:db -- --check   # connectivity check only
+```
+Requires `SUPABASE_DB_URL` in `.env` pointing at a **staging** database — never production, never committed. Each test file runs in a transaction that is rolled back. Tests that are written but not executed are unverified, not green. See [docs/runbook.md](docs/runbook.md) for details and current status.
 
 ## Before production
 - Implement database-side authoritative price and package/menu rule validation in a single transaction/RPC. Do not trust client-submitted prices.
