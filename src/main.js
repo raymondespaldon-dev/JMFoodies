@@ -1,5 +1,8 @@
 import './styles.css';
 import { supabase, isConfigured } from './supabase.js';
+import { logoMark } from './brand.js';
+import { enhanceSelects } from './ui-select.js';
+import { renderHomePage } from './home-page.js';
 
 const app = document.querySelector('#app');
 const path = location.pathname;
@@ -33,166 +36,79 @@ function formatEventTime(value){
 }
 const notify = (msg, bad=false) => { const el=document.querySelector('#notice'); if(el){el.textContent=msg;el.className='notice '+(bad?'bad':'good');} };
 
+const ICONS = {
+  home:'<path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/>',
+  box:'<path d="m4 7 8-4 8 4-8 4-8-4Z"/><path d="M4 7v10l8 4 8-4V7M12 11v10"/>',
+  calendar:'<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18M12 13v5m-2.5-2.5h5"/>',
+  search:'<circle cx="10.8" cy="10.8" r="6.8"/><path d="m16 16 5 5"/>',
+  clipboard:'<rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4V3h6v1M8 9h8M8 13h6M8 17h4"/>',
+  bell:'<path d="M18 9a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9ZM10 21h4"/>',
+  user:'<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>',
+  userPlus:'<circle cx="9" cy="8" r="4"/><path d="M2 21a7 7 0 0 1 14 0M19 8v6m-3-3h6"/>',
+  gauge:'<path d="M4 19a8 8 0 1 1 16 0M12 11l4-4M5 19h14"/>',
+  x:'<circle cx="12" cy="12" r="9"/><path d="m9 9 6 6m0-6-6 6"/>',
+  gift:'<path d="M3 10h18v11H3zM2 7h20v3H2zM12 7v14M12 7H8a2 2 0 1 1 2-4c2 0 2 4 2 4Zm0 0h4a2 2 0 1 0-2-4c-2 0-2 4-2 4Z"/>',
+  fork:'<path d="M7 3v7m-3-7v4a3 3 0 0 0 6 0V3M7 10v11M17 3v18M17 3c4 2 4 6 0 8"/>',
+  chart:'<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>',
+  gear:'<circle cx="12" cy="12" r="3"/><path d="m19.4 15 .1.1 1.4 1.4-2.8 2.8-1.4-1.4-.1-.1a7.7 7.7 0 0 1-2 .8V21h-4v-2.4a7.7 7.7 0 0 1-2-.8l-.1.1-1.4 1.4-2.8-2.8 1.4-1.4.1-.1a7.7 7.7 0 0 1-.8-2H3v-4h2.4a7.7 7.7 0 0 1 .8-2l-.1-.1-1.4-1.4 2.8-2.8 1.4 1.4.1.1a7.7 7.7 0 0 1 2-.8V3h4v2.4a7.7 7.7 0 0 1 2 .8l.1-.1 1.4-1.4 2.8 2.8-1.4 1.4-.1.1a7.7 7.7 0 0 1 .8 2H21v4h-2.4a7.7 7.7 0 0 1-.8 2Z"/>',
+  signIn:'<path d="M14 8V4H4v16h10v-4M10 12h11m-4-4 4 4-4 4"/>',
+  signOut:'<path d="M10 4H4v16h6m5-12 4 4-4 4m4-4H8"/>',
+  mail:'<rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/>',
+  lock:'<rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/>',
+  menu:'<path d="M4 6h16M4 12h16M4 18h16"/>',
+  collapse:'<path d="M4 5h16v14H4zM9 5v14m4-9 2 2-2 2"/>'
+};
+const icon = name => `<span class="icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" focusable="false">${ICONS[name] || ''}</svg></span>`;
+const navLink = (href, key, label, name, extra='') => `<a href="${href}" class="sidebar-link ${extra}" data-page="${key}" title="${label}" aria-label="${label}">${icon(name)}<span class="label">${label}</span></a>`;
+
+function sidebarSections(user, admin) {
+  const customer = `<div class="sidebar-section"><div class="sidebar-section-title">Customer</div>${navLink('/index.html','index','Home','home')}${navLink('/packages.html','packages','Packages','box')}${navLink('/booking.html','booking','Book an Event','calendar','navcta-link')}${navLink('/track-booking.html','track-booking','Track Booking','search')}</div>`;
+  const account = user ? `<div class="sidebar-section"><div class="sidebar-section-title">Account</div>${navLink('/my-bookings.html','my-bookings','My Bookings','clipboard')}${navLink('/notifications.html','notifications','Notifications','bell','notification-nav-link')}<span id="notificationNavBadge" class="notification-badge" hidden>0</span>${navLink('/account.html','account','My Account','user')}</div>` : `<div class="sidebar-section"><div class="sidebar-section-title">Account</div>${navLink('/login.html','login','Sign In','signIn')}${navLink('/register.html','register','Create Account','userPlus')}</div>`;
+  if(!admin) return customer + account;
+  return customer + account + `<div class="sidebar-section"><div class="sidebar-section-title">Operations</div>${navLink('/admin/dashboard.html','dashboard','Dashboard','gauge')}${navLink('/admin/bookings.html','bookings','Bookings','clipboard')}${navLink('/admin/cancellation-requests.html','cancellation-requests','Cancellations','x')}</div><div class="sidebar-section"><div class="sidebar-section-title">Catalog</div>${navLink('/admin/packages.html','packages','Packages','gift')}${navLink('/admin/food-management.html','food-management','Food Menu','fork')}</div><div class="sidebar-section"><div class="sidebar-section-title">Insights</div>${navLink('/admin/reports.html','reports','Reports','chart')}</div><div class="sidebar-section"><div class="sidebar-section-title">System</div>${navLink('/admin/settings.html','settings','Settings','gear')}</div>`;
+}
+
+function renderFrame(content, { admin = false, user = null } = {}) {
+  const currentPage = path.split('/').pop().replace('.html','') || (admin ? 'dashboard' : 'index');
+  const label = user?.full_name || (admin ? 'Administrator' : 'Guest');
+  app.innerHTML = `<button class="sidebar-toggle" id="sidebarToggle" aria-label="Open menu" aria-controls="sidebar" aria-expanded="false">${icon('menu')}</button><div class="sidebar-scrim" id="sidebarScrim" hidden></div><div class="app-shell" id="appShell"><aside class="sidebar" id="sidebar"><a class="brand" href="${admin ? '/admin/dashboard.html' : '/index.html'}"><span class="brandmark" aria-hidden="true">${logoMark(40)}</span><span class="brandtext"><strong>JMFoodies</strong><small>${admin ? 'Admin' : 'Catering'}</small></span><button class="sidebar-collapse" id="sidebarCollapse" aria-label="Collapse sidebar" aria-expanded="true" type="button">${icon('collapse')}</button></a><div class="sidebar-body">${sidebarSections(user, admin)}</div><div class="sidebar-footer"><div class="sidebar-user"><span class="sidebar-avatar">${esc(label.slice(0,1).toUpperCase())}</span><span class="sidebar-user-text"><strong class="sidebar-user-name">${esc(label)}</strong><small class="sidebar-user-role">${admin ? 'Administrator' : user ? 'Customer' : 'Visitor'}</small></span></div><button class="sidebar-signout" id="${admin ? 'logout' : 'customerLogout'}" title="${user ? 'Sign out' : 'Sign in'}" aria-label="${user ? 'Sign out' : 'Sign in'}" type="button">${icon(user ? 'signOut' : 'signIn')}<span class="label">${user ? 'Sign out' : 'Sign in'}</span></button></div></aside><div class="main-with-sidebar"><header class="topbar"><div class="topbar-left">${icon('gauge')}<span class="topbar-title">${esc(currentPage.replaceAll('-',' '))}</span></div><div class="topbar-right">JMFoodies · ${admin ? 'Administration' : 'Catering'}</div></header><main class="shellmain${admin ? ' adminmain' : ''}">${content}</main><footer>JMFoodies Catering · Thoughtfully prepared for your celebrations</footer><div id="notice" class="notice"></div></div></div>`;
+  document.querySelectorAll('.sidebar-link[data-page]').forEach(link => { if(link.dataset.page === currentPage) link.classList.add('active'); });
+  document.querySelectorAll('select').forEach(select => enhanceSelects(select.parentElement || document));
+  const shellEl = document.querySelector('#appShell'), sidebar = document.querySelector('#sidebar'), scrim = document.querySelector('#sidebarScrim'), mobile = document.querySelector('#sidebarToggle');
+  const setMobile = open => { sidebar?.classList.toggle('open', open); mobile?.setAttribute('aria-expanded', String(open)); if(scrim) scrim.hidden = !open; };
+  mobile?.addEventListener('click', () => setMobile(!sidebar?.classList.contains('open'))); scrim?.addEventListener('click', () => setMobile(false)); document.addEventListener('keydown', e => { if(e.key === 'Escape') setMobile(false); });
+  const collapse = document.querySelector('#sidebarCollapse'); const collapsed = localStorage.getItem('jm.sidebarCollapsed') === '1'; shellEl?.classList.toggle('is-collapsed', collapsed); collapse?.setAttribute('aria-expanded', String(!collapsed)); collapse?.addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); const next = !shellEl.classList.contains('is-collapsed'); shellEl.classList.toggle('is-collapsed', next); localStorage.setItem('jm.sidebarCollapsed', next ? '1' : '0'); collapse.setAttribute('aria-expanded', String(!next)); });
+  const logout = document.querySelector('#logout, #customerLogout'); logout?.addEventListener('click', async () => { if(!user) { location.href='/login.html'; return; } const { error } = await supabase.auth.signOut(); if(error) return notify(error.message, true); location.href=admin?'/login.html':'/index.html'; });
+}
+
 const shell = async content => {
- const user = await getUser();
+  const user = await getUser();
+  renderFrame(content, { user, admin: false });
 
- let customerNav = `
-  <a href="/packages.html">Packages</a>
-  <a href="/track-booking.html">Track booking</a>
-  <a href="/login.html">Sign in</a>
-  <a class="navcta" href="/booking.html">Book an event</a>
- `;
-
- 
-if (user) {
-  if (user.role === 'admin') {
-    customerNav = `
-      <a href="/admin/dashboard.html">Admin Dashboard</a>
-      <a href="/admin/bookings.html">Manage Bookings</a>
-      <div class="profile-menu">
-        <button class="profile-toggle" id="profileToggle" type="button">
-          ${esc(user.full_name || 'Admin')} <span class="role-label admin-role">ADMIN</span> ▾
-        </button>
-        <div class="profile-dropdown" id="profileDropdown" hidden>
-          <a href="/admin/settings.html">Settings</a>
-          <button id="customerLogout" type="button">Sign Out</button>
-        </div>
-      </div>
-    `;
-  } else {
-    customerNav = `
-      <a href="/packages.html">Packages</a>
-      <a href="/track-booking.html">Track booking</a>
-
- <a href="/notifications.html" class="notification-nav-link notification-bell-link" aria-label="Notifications">
-    <span class="bell-icon">🔔</span>
-    <span id="notificationNavBadge" class="notification-badge" hidden>0</span>
-  </a>
-
-      <div class="profile-menu">
-        <button class="profile-toggle" id="profileToggle" type="button">
-          ${esc(user.full_name || 'My Account')} <span class="role-label customer-role">CUSTOMER</span> ▾
-        </button>
-        <div class="profile-dropdown" id="profileDropdown" hidden>
-          <a href="/account.html">My Account</a>
-          <a href="/my-bookings.html">My Bookings</a>
-          <a href="/notifications.html" class="notification-nav-link">
-  Notifications
-  <span id="notificationBadge" class="notification-badge" hidden>0</span>
-</a>
-          <button id="customerLogout" type="button">Sign Out</button>
-        </div>
-      </div>
-    `;
-  }
-
-  customerNav += `
-    <a class="navcta" href="/booking.html">Book an event</a>
-  `;
-}
-
-
- app.innerHTML = `
-  <header class="top">
-   <a class="brand" href="/index.html">
-    <span class="brandmark">J</span> JMFoodies
-   </a>
-   <nav>${customerNav}</nav>
-  </header>
-  <main>${content}</main>
-  <footer>JMFoodies Catering · Thoughtfully prepared for your celebrations</footer>
-  <div id="notice" class="notice"></div>
- `;
-
- const toggle = document.querySelector('#profileToggle');
- const dropdown = document.querySelector('#profileDropdown');
-
- toggle?.addEventListener('click', () => {
-  dropdown.hidden = !dropdown.hidden;
- });
-
-
-document.querySelector('#customerLogout')?.addEventListener('click', async () => {
-  const { error } = await supabase.auth.signOut();
-  if (error) return notify(error.message, true);
-  location.href = '/index.html';
-});
-
-// Live customer notification counter
-if(user?.role === 'customer'){
-  const badges = [
-  document.querySelector('#notificationBadge'),
-  document.querySelector('#notificationNavBadge')
-].filter(Boolean);
-
-  async function updateNotificationBadge(){
-    const { count, error } = await supabase
-      .from('notifications')
-      .select('id', { count: 'exact', head: true })
-      .eq('user_id', user.id)
-      .eq('is_read', false);
-
-    if(error){
-      console.error('Could not load notification count:', error.message);
-      return;
+  // Live customer notification counter
+  if(user?.role === 'customer'){
+    const badges = [document.querySelector('#notificationNavBadge')].filter(Boolean);
+    async function updateNotificationBadge(){
+      const { count, error } = await supabase
+        .from('notifications')
+        .select('id', { count: 'exact', head: true })
+        .eq('user_id', user.id)
+        .eq('is_read', false);
+      if(error){ console.error('Could not load notification count:', error.message); return; }
+      badges.forEach(badge => {
+        badge.textContent = count > 99 ? '99+' : String(count);
+        badge.hidden = !count;
+      });
     }
-
-    badges.forEach(badge => {
-  badge.textContent = count > 99 ? '99+' : String(count);
-  badge.hidden = !count;
-});
+    updateNotificationBadge();
+    supabase
+      .channel('customer-notifications-' + user.id)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'notifications', filter: 'user_id=eq.' + user.id }, () => updateNotificationBadge())
+      .subscribe();
   }
-
-  // Load initial unread count
-  updateNotificationBadge();
-
-  // Listen for notification changes in real time
-  supabase
-    .channel('customer-notifications-' + user.id)
-    .on(
-      'postgres_changes',
-      {
-        event: '*',
-        schema: 'public',
-        table: 'notifications',
-        filter: 'user_id=eq.' + user.id
-      },
-      () => updateNotificationBadge()
-    )
-    .subscribe();
-}
 };
 
-
-
-const adminShell = content => {
-  app.innerHTML = `
-    <header class="top">
-      <a class="brand" href="/admin/dashboard.html">
-        <span class="brandmark">J</span> JMFoodies <small>ADMIN</small>
-      </a>
-
-      <nav>
-        <a href="/admin/dashboard.html">Overview</a>
-        <a href="/admin/bookings.html">Bookings</a>
-        <a href="/admin/packages.html">Packages</a>
-        <a href="/admin/food-management.html">Food menu</a>
-        <a href="/admin/cancellation-requests.html">Cancellation Requests</a>
-        <a href="/admin/reports.html">Reports</a>
-        <a href="/admin/settings.html">Settings</a>
-        <button id="logout" class="linkbtn">Sign out</button>
-      </nav>
-    </header>
-
-    <main class="adminmain">${content}</main>
-    <div id="notice" class="notice"></div>
-  `;
-
-  document.querySelector('#logout')?.addEventListener('click', async () => {
-    await supabase?.auth.signOut();
-    location.href = '/login.html';
-  });
-};
+const adminShell = content => renderFrame(content, { admin: true, user: { full_name: 'Admin' , role: 'admin' } });
 
 const needDb = () => { if(!isConfigured){shell(`<section class="hero"><p class="eyebrow">SETUP REQUIRED</p><h1>Connect your Supabase project</h1><p>Add your project URL and publishable/anon key to <code>.env</code>, then restart Vite. Setup instructions are in README.md.</p><a class="btn" href="/packages.html">View setup-aware package page</a></section>`);return false;} return true; };
 
@@ -222,11 +138,33 @@ async function getUser(){
 
 async function requireAdmin(){ if(!needDb())return false; const user=await getUser(); if(!user){location.href='/login.html';return false;} const {data,error}=await supabase.from('profiles').select('role').eq('id',user.id).single(); if(error||data?.role!=='admin'){shell('<section class="panel"><h1>Administrator access required</h1><p>This account is not authorized to access the dashboard.</p><a href="/login.html">Sign in with an administrator account</a></section>');return false;} return true; }
 function navCard(p){return `<article class="package"><div class="package-art">${p.image_url?`<img src="${esc(p.image_url)}" alt="">`:'<span>✦</span>'}</div><div class="pad"><p class="eyebrow">${esc(p.minimum_guests||'')}${p.minimum_guests?' GUEST MINIMUM':''}</p><h3>${esc(p.name)}</h3><p class="muted">${esc(p.description||'A thoughtfully prepared menu for your event.')}</p><div class="price">${money(p.price_per_person)} <small>/ person</small></div><a class="btn outline" href="/booking.html?package=${p.id}">Customize package</a></div></article>`;}
-async function home(){await shell(`<section class="hero"><div><p class="eyebrow">MADE FOR GATHERING</p><h1>Good food.<br><em>Beautiful moments.</em></h1><p>Bring people together with catering menus tailored to your celebration, your guests, and your budget.</p><div class="actions"><a class="btn" href="/packages.html">Explore packages</a><a class="textlink" href="/booking.html">Plan an event →</a></div></div><div class="hero-photo"><div class="photo-note">Gather · Celebrate · Enjoy</div></div></section><section class="section"><div class="sectionhead"><div><p class="eyebrow">OUR OFFERINGS</p><h2>Packages for every occasion</h2></div><a class="textlink" href="/packages.html">See all packages →</a></div><div id="packages" class="cards"><p class="muted">Loading packages…</p></div></section><section class="band"><p class="eyebrow">YOUR MENU, YOUR WAY</p><h2>Choose the dishes your guests will love.</h2><p>Start with a suggested package menu or customize using the official JMFoodies menu.</p><a class="btn light" href="/booking.html">Build your menu</a></section>`);
- if(!needDb())return; const {data,error}=await supabase.from('packages').select('*').eq('is_active',true).order('sort_order'); document.querySelector('#packages').innerHTML=error?'<p class="muted">Packages could not be loaded. Check your database setup.</p>':(data?.length?data.slice(0,3).map(navCard).join(''):'<p class="muted">No packages published yet. Please check back soon.</p>');
-}
+async function home(){ await renderHomePage(); }
 async function packagesPage(){await shell(`<section class="pagehead"><p class="eyebrow">FIND YOUR FIT</p><h1>Our catering packages</h1><p>Compare inclusions, then customize the menu around your event.</p></section><div id="packages" class="cards"><p>Loading…</p></div>`);if(!needDb())return;const {data,error}=await supabase.from('packages').select('*').eq('is_active',true).order('sort_order');document.querySelector('#packages').innerHTML=error?'<p>Unable to load packages.</p>':data?.length?data.map(navCard).join(''):'<p>No active packages are available yet.</p>';}
-async function authPage(register=false){await shell(`<section class="auth panel"><p class="eyebrow">JMFOODIES ACCOUNT</p><h1>${register?'Create your account':'Welcome back'}</h1><form id="authform"><label>Email address<input name="email" type="email" required autocomplete="email"></label><label>Password<input name="password" type="password" minlength="8" required autocomplete="${register?'new-password':'current-password'}"></label>${register?'<label>Full name<input name="name" required></label>':''}<button class="btn" type="submit">${register?'Create account':'Sign in'}</button></form><p class="muted">${register?'Already registered?':'New to JMFoodies?'} <a href="${register?'/login.html':'/register.html'}">${register?'Sign in':'Create an account'}</a></p><a class="textlink" href="#" id="forgot">Forgot password?</a></section>`);if(!needDb())return;document.querySelector('#authform').addEventListener('submit',async e=>{e.preventDefault();const f=new FormData(e.currentTarget),email=f.get('email'),password=f.get('password');let result;if(register){result=await supabase.auth.signUp({email,password,options:{data:{full_name:f.get('name')}}});}else result=await supabase.auth.signInWithPassword({email,password});if(result.error)return notify(result.error.message,true);if(register){notify('Account created. Check your email if confirmation is enabled.');}else location.href='/index.html';});document.querySelector('#forgot').addEventListener('click',async e=>{e.preventDefault();const email=prompt('Enter your account email');if(!email)return;const {error}=await supabase.auth.resetPasswordForEmail(email,{redirectTo:location.origin+'/login.html'});notify(error?.message||'Password reset email requested.',!!error);});}
+const loginSlides = [
+  ['Adobo Feast', 'Filipino chicken adobo with rice and vegetables', 'https://images.unsplash.com/photo-1601050690597-df0568f70950?auto=format&fit=crop&w=1920&q=88'],
+  ['Pancit Palabok', 'A generous plate of Filipino noodles with shrimp', 'https://images.unsplash.com/photo-1559314809-0d155014e29e?auto=format&fit=crop&w=1920&q=88'],
+  ['Crispy Pata', 'Crispy pata served for a Filipino celebration', 'https://images.unsplash.com/photo-1544025162-d76694265947?auto=format&fit=crop&w=1920&q=88'],
+  ['Sinigang na Hipon', 'Sinigang na hipon with shrimp and vegetables', 'https://images.unsplash.com/photo-1547592180-85f173990554?auto=format&fit=crop&w=1920&q=88'],
+  ['Lechon Kawali', 'Sliced crispy pork with herbs and dipping sauce', 'https://images.unsplash.com/photo-1601050690117-94f5f6fa8bd7?auto=format&fit=crop&w=1920&q=88']
+];
+
+async function loginPage(){
+  app.innerHTML = `<main class="login-page"><div class="login-backdrop" aria-hidden="true">${loginSlides.map(([name, alt, image], index) => `<figure class="login-slide${index === 0 ? ' is-active' : ''}" data-slide="${index}"><img src="${image}" alt="${alt}"><figcaption>${name}</figcaption></figure>`).join('')}</div><div class="login-overlay" aria-hidden="true"></div><section class="login-card" aria-labelledby="login-title"><a class="login-back" href="/index.html" aria-label="Back to home">← Back</a><a class="login-logo-link" href="/index.html" aria-label="Go to JMFoodies home"><div class="login-logo">${logoMark(84)}</div></a><p class="login-kicker">JMFOODIES ACCOUNT</p><h1 id="login-title">Welcome back</h1><p class="login-subtitle">Sign in to continue planning your next gathering.</p><form id="authform" novalidate><label>Email address<span class="login-input"><span class="login-input-icon">${icon('mail')}</span><input name="email" type="email" required autocomplete="email" placeholder="Enter your email"></span></label><label>Password<span class="login-input"><span class="login-input-icon">${icon('lock')}</span><input name="password" type="password" minlength="8" required autocomplete="current-password" placeholder="••••••••"><button type="button" class="password-toggle" aria-label="Show password">Show</button></span></label><button class="login-submit" type="submit">Sign in</button></form><p class="login-register">New to JMFoodies? <a href="/register.html">Create an account</a></p><a class="login-forgot" href="#" id="forgot">Forgot password?</a><div id="notice" class="notice" role="status" aria-live="polite"></div></section><div class="login-dots" aria-label="Food photography slideshow">${loginSlides.map(([, name], index) => `<span class="login-dot${index === 0 ? ' is-active' : ''}" aria-label="${name}" data-dot="${index}"></span>`).join('')}</div></main>`;
+  const preload = image => { const img = new Image(); img.src = image; return img; };
+  loginSlides.forEach(([, , image]) => preload(image));
+  let current = 0;
+  const slides = [...document.querySelectorAll('.login-slide')];
+  const dots = [...document.querySelectorAll('.login-dot')];
+  const showSlide = next => { slides[current].classList.remove('is-active'); dots[current].classList.remove('is-active'); current = next % slides.length; slides[current].classList.add('is-active'); dots[current].classList.add('is-active'); };
+  const slideshow = window.matchMedia('(prefers-reduced-motion: reduce)').matches ? null : setInterval(() => showSlide(current + 1), 1000);
+  dots.forEach(dot => dot.addEventListener('click', () => showSlide(Number(dot.dataset.dot))));
+  document.querySelector('.password-toggle')?.addEventListener('click', e => { const input = e.currentTarget.previousElementSibling; input.type = input.type === 'password' ? 'text' : 'password'; e.currentTarget.textContent = input.type === 'password' ? 'Show' : 'Hide'; e.currentTarget.setAttribute('aria-label', input.type === 'password' ? 'Show password' : 'Hide password'); });
+  document.querySelector('#authform').addEventListener('submit', async e => { e.preventDefault(); const f = new FormData(e.currentTarget), email = f.get('email'), password = f.get('password'); if(!isConfigured) return notify('Connect your Supabase project before signing in.', true); const { error } = await supabase.auth.signInWithPassword({ email, password }); if(error) return notify(error.message, true); location.href = '/index.html'; });
+  document.querySelector('#forgot').addEventListener('click', async e => { e.preventDefault(); const email = prompt('Enter your account email'); if(!email) return; if(!isConfigured) return notify('Connect your Supabase project before requesting a reset.', true); const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: location.origin + '/login.html' }); notify(error?.message || 'Password reset email requested.', !!error); });
+  return () => slideshow && clearInterval(slideshow);
+}
+
+async function authPage(register=false){if(!register)return loginPage();const copy={eyebrow:'JOIN THE TABLE',title:'Create your account',sub:'Save your bookings and make every celebration easier.',action:'Create account'};await shell(`<section class="auth-layout"><div class="auth-art"><div class="auth-art-brand">${logoMark(72)}<span>JMFoodies</span></div><p class="eyebrow">WE CATER, YOU CELEBRATE</p><h1>Masarap na handa,<br><em>masayang salu-salo.</em></h1><p>Thoughtful Filipino catering for the moments worth sharing.</p></div><section class="auth panel"><p class="eyebrow">${copy.eyebrow}</p><h1>${copy.title}</h1><p class="muted">${copy.sub}</p><form id="authform"><label>Email address<input name="email" type="email" required autocomplete="email"></label><label>Password<div class="password-field"><input name="password" type="password" minlength="8" required autocomplete="new-password"><button type="button" class="password-toggle" aria-label="Show password">Show</button></div></label><label>Full name<input name="name" required autocomplete="name"></label><button class="btn block" type="submit">${copy.action}<span aria-hidden="true">→</span></button></form><p class="muted auth-switch">Already registered? <a href="/login.html">Sign in</a></p><a class="textlink" href="#" id="forgot">Forgot password?</a></section></section>`);document.querySelector('.password-toggle')?.addEventListener('click',e=>{const input=e.currentTarget.previousElementSibling;input.type=input.type==='password'?'text':'password';e.currentTarget.textContent=input.type==='password'?'Show':'Hide';});if(!needDb())return;document.querySelector('#authform').addEventListener('submit',async e=>{e.preventDefault();const f=new FormData(e.currentTarget),email=f.get('email'),password=f.get('password');const result=await supabase.auth.signUp({email,password,options:{data:{full_name:f.get('name')}}});if(result.error)return notify(result.error.message,true);notify('Account created. Check your email if confirmation is enabled.');});document.querySelector('#forgot').addEventListener('click',async e=>{e.preventDefault();const email=prompt('Enter your account email');if(!email)return;const {error}=await supabase.auth.resetPasswordForEmail(email,{redirectTo:location.origin+'/login.html'});notify(error?.message||'Password reset email requested.',!!error);});}
 let currentPackage=null, categories=[], foodItems=[], selections=new Set(), mode='suggested';
 async function bookingPage(){
 await shell(`<section class="pagehead"><p class="eyebrow">LET'S CELEBRATE</p><h1>Build your catering booking</h1><p>Choose a package, make it yours, and send a request for our team to review.</p></section><div class="bookinggrid"><section class="panel"><div class="step"><span>01</span><div><h2>Choose a package</h2><p class="muted">Your package sets the base price and selection rules.</p></div></div><div id="pkgchoices">Loading packages…</div><div class="step"><span>02</span><div><h2>Choose your menu</h2><p class="muted">Use the suggested menu or customize from the official menu.</p></div></div><div class="toggle"><button data-mode="suggested" class="active">Suggested menu</button><button data-mode="custom">Customize menu</button></div><div id="menuarea"><p class="muted">Select a package to view its menu.</p></div></section><aside class="panel summary"><p class="eyebrow">YOUR ESTIMATE</p><h2>Price summary</h2><div id="summary">Choose a package to begin.</div><hr><h3>Event details</h3><form id="bookingform"><label>Full name<input name="full_name" required></label><label>Email<input name="email" type="email" required></label><label>Contact number<input name="phone" required></label><label>Event name<input name="event_name" required placeholder="e.g. Ana's 18th birthday"></label><label>Event type<select name="event_type" required><option value="">Choose one</option>${['Birthday','Wedding','Anniversary','Corporate Event','Graduation','Other'].map(x=>`<option>${x}</option>`).join('')}</select></label><label>Event date<input name="event_date" type="date" required min="${new Date().toISOString().slice(0,10)}"></label><label>Event time<input name="event_time" type="time" required></label><label>Venue / address<input name="venue" required></label><label>Number of guests<input name="guest_count" type="number" min="1" value="50" required></label><label>Special instructions<textarea name="special_requests" rows="3"></textarea></label><label>Special food request (optional)<textarea name="special_food_request" rows="2" placeholder="Requires administrator approval; not included in this estimate."></textarea></label><button class="btn block" type="submit">Submit booking request</button><p class="tiny muted">Submitting sends a request only. Your reservation is not confirmed until approved by JMFoodies.</p></form></aside></div>`);
@@ -1141,7 +1079,7 @@ async function notificationsPage(){
     }
 
     area.innerHTML = data.map(n => `
-      <article class="panel" style="margin-bottom:12px; ${n.is_read ? 'opacity:.75;' : 'border-left:4px solid var(--green);'}">
+      <article class="panel" style="margin-bottom:12px; ${n.is_read ? 'opacity:.75;' : 'border-left:4px solid var(--red);'}">
         <div class="sectionhead">
           <h3>${esc(n.title)}</h3>
           <span class="status">${n.is_read ? 'Read' : 'Unread'}</span>

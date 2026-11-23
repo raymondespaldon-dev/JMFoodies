@@ -1,0 +1,13 @@
+// Filipino-themed home page markup.
+// STUB — the home worker replaces this file; keep the exported signatures.
+// Contract: .orca/specs/ui-contract.md §5
+
+export function homeHero() {
+  const flags = Array.from({ length: 11 }, (_, i) => `<span class="bunting-flag" style="--i:${i}" aria-hidden="true"></span>`).join('');
+  return `<section class="home-hero-filipino hero"><div class="bunting" aria-hidden="true">${flags}</div><div class="parol parol-a" aria-hidden="true"><span class="parol-body">✦</span><span class="parol-tassel"></span></div><div class="parol parol-b" aria-hidden="true"><span class="parol-body">✦</span><span class="parol-tassel"></span></div><div class="hero-copy"><p class="eyebrow">WE CATER, YOU CELEBRATE</p><h1>Masarap na handa,<br><em>masayang salu-salo.</em></h1><p>Bring people together with comforting Filipino flavors, generous tables, and thoughtful service for the moments worth sharing.</p><div class="actions"><a class="btn" href="/packages.html">Explore packages</a><a class="textlink" href="/booking.html">Plan an event →</a></div></div><div class="hero-photo" role="img" aria-label="Filipino catering dishes arranged for a celebration"><div class="photo-dish dish-lechon" aria-hidden="true">🍖</div><div class="photo-dish dish-inasal" aria-hidden="true">🍗</div><div class="photo-dish dish-pancit" aria-hidden="true">🍜</div><div class="photo-note">Great Food · Great Service · Great Memories</div></div></section>`;
+}
+
+export function homeClosing() {
+  const cards = [['🍖','Lechon Belly','Crisp, savory centerpiece for the table.'],['🍗','Chicken Inasal','Smoky, marinated comfort with Filipino flair.'],['🍜','Pancit Bam-i','Noodles made for sharing and second helpings.'],['🥟','Lumpiang Shanghai','Golden bites that disappear first.'],['🍲','Kare-Kare','Rich, cozy, and made for a gathering.'],['🍧','Halo-halo','A colorful sweet finish to the feast.']];
+  return `<section class="home-gallery section"><div class="sectionhead"><div><p class="eyebrow">FAVORITES FOR THE TABLE</p><h2>A little taste of home.</h2></div><p class="muted">Satisfy your cravings with familiar Filipino favorites.</p></div><div class="gallery-grid">${cards.map(([icon,title,copy]) => `<article class="gallery-card"><span class="gallery-icon" aria-hidden="true">${icon}</span><h3>${title}</h3><p>${copy}</p></article>`).join('')}</div></section><section class="home-cta band"><p class="eyebrow">HANDA NA BA TAYO?</p><h2>Let’s make your next gathering delicious.</h2><p>Choose a package, customize the menu, and start planning your celebration.</p><a class="btn light" href="/booking.html">Build your menu</a></section>`;
+}

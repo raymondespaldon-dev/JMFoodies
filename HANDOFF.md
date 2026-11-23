@@ -2,6 +2,10 @@
 
 > Read this first when resuming work. Continue from the step below. Do not re-plan.
 
+> **In-flight UI work is not described here.** The UI redesign and its Orca worker wave (four
+> agents, uncommitted) are handed off in `HANDOFF_UI_ORCHESTRATION.md`. The Slice 3 record below
+> is unaffected and still accurate.
+
 **Updated:** 2026-11-23
 **Branch:** `feat/booking-hardening`
 **Current slice:** Slice 3 — secure booking core → **COMPLETE, all tests passing**
