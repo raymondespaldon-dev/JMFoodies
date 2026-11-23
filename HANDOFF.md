@@ -18,7 +18,7 @@
 | Docs correction (Freebuff role, Orca agents) | ✅ done | `85b6e12` |
 | Slice 3 contract | ✅ **frozen** | `SLICE_3_SPEC.md` v1.1.0 at `a98cd25` — 7 gate corrections, see spec §9 |
 | ADR 0001 | ✅ accepted | `docs/adr/0001-atomic-booking-rpc.md` |
-| `slice3-web` worker | ▶ **running** | dispatch `ctx_f7ccefe6b157`, `opencode/beam-free`, worktree `.../JMFoodies/slice3-web` (kept open) |
+| `slice3-web` worker | ✅ **integrated** | cherry-picked as `0e63608`; verified build green (63 modules, 16 pages); worktree released and removed |
 | `slice3-db` worker | ⏸ **not started** | needs the Freebuff high window confirmed first |
 | Slice 2 RLS verification | ❌ not tested | no `database/tests/` yet |
 | Slice 3 implementation | ⏳ in progress | `create_booking` RPC not written yet |
@@ -26,7 +26,7 @@
 ## What is next
 
 1. ✅ **Run A done** — contract frozen at `a98cd25`.
-2. ▶ **`slice3-web` running** — rewiring `submitBooking` to one `create_booking` call.
+2. ✅ **`slice3-web` done** — cherry-picked as `0e63608`, verified green.
 3. ⏸ **Start `slice3-db`** once the Freebuff high window is confirmed:
 
    ```powershell
@@ -34,7 +34,7 @@
    ```
    Without `SUPABASE_DB_URL` it writes the 18 test files but cannot run them — treat that result as **unverified**, not green.
 4. **Run C** — reviewer (`codex`), `.orca/specs/review.md`, read-only. The RPC is where Codex's scarce quota earns its cost.
-5. Then merge the two worker branches, Step 6 (RLS access matrix), Step 8 (verify), Step 9 (docs).
+5. Then merge the db branch, Step 6 (RLS access matrix), Step 8 (verify), Step 9 (docs).
 
 ## Gate findings from Run A (already fixed — do not reintroduce)
 
