@@ -147,3 +147,29 @@ create index bookings_event_date_idx on public.bookings(event_date);
 create index bookings_status_idx on public.bookings(status);
 create index food_items_category_idx on public.food_items(category_id);
 create index booking_food_booking_idx on public.booking_food_items(booking_id);
+
+create table public.notifications (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  title text not null,
+  message text not null,
+  type text not null default 'info',
+  is_read boolean not null default false,
+  created_at timestamptz not null default now()
+);
+
+create table public.booking_cancellation_requests (
+  id uuid primary key default gen_random_uuid(),
+  booking_id uuid not null references public.bookings(id) on delete cascade,
+  customer_id uuid not null references auth.users(id) on delete cascade,
+  reason text not null,
+  status text not null default 'pending' check(status in ('pending','approved','rejected')),
+  admin_note text,
+  created_at timestamptz not null default now()
+);
+
+create index notifications_user_idx on public.notifications(user_id);
+create index notifications_read_idx on public.notifications(user_id, is_read);
+create index cancellation_requests_booking_idx on public.booking_cancellation_requests(booking_id);
+create index cancellation_requests_customer_idx on public.booking_cancellation_requests(customer_id);
+create index cancellation_requests_status_idx on public.booking_cancellation_requests(status);

@@ -44,3 +44,14 @@ create policy "admin read availability" on public.availability for select using(
 create policy "admin manage availability" on public.availability for all using(public.is_admin()) with check(public.is_admin());
 create policy "public read public settings" on public.business_settings for select using(key in ('business_profile','public_contact','booking_rules'));
 create policy "admin manage settings" on public.business_settings for all using(public.is_admin()) with check(public.is_admin());
+
+alter table public.notifications enable row level security;
+alter table public.booking_cancellation_requests enable row level security;
+
+create policy "customer read own notifications" on public.notifications for select using(user_id = auth.uid() or public.is_admin());
+create policy "customer update own notifications" on public.notifications for update using(user_id = auth.uid() or public.is_admin()) with check(user_id = auth.uid() or public.is_admin());
+create policy "admin manage notifications" on public.notifications for all using(public.is_admin()) with check(public.is_admin());
+
+create policy "customer read own cancellation requests" on public.booking_cancellation_requests for select using(customer_id = auth.uid() or public.is_admin());
+create policy "customer create own cancellation request" on public.booking_cancellation_requests for insert with check(customer_id = auth.uid());
+create policy "admin manage cancellation requests" on public.booking_cancellation_requests for all using(public.is_admin()) with check(public.is_admin());

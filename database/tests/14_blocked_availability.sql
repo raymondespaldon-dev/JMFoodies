@@ -43,15 +43,14 @@ begin
       'selected_food_item_ids', jsonb_build_array(v_food::text)
     ));
     raise exception 'ASSERTION_FAILED: create_booking accepted a blocked time slot';
-  exception when others then
-    if sqlerrm like 'ASSERTION_FAILED:%' then
-      raise;
-    end if;
-    if sqlstate <> 'P0004' then
-      raise exception 'ASSERTION_FAILED: expected SQLSTATE P0004, got % (%)', sqlstate, sqlerrm;
-    end if;
+  exception when sqlstate 'P0004' then
     if sqlerrm not like 'TIME_SLOT_UNAVAILABLE:%' then
       raise exception 'ASSERTION_FAILED: expected TIME_SLOT_UNAVAILABLE, got %', sqlerrm;
     end if;
+  when others then
+    if sqlerrm like 'ASSERTION_FAILED:%' then
+      raise;
+    end if;
+    raise exception 'ASSERTION_FAILED: expected SQLSTATE P0004, got % (%)', sqlstate, sqlerrm;
   end;
 end $$;

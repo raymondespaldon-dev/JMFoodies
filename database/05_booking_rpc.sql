@@ -330,7 +330,7 @@ begin
   -- 2.5 / 2.6: generate the reference and insert parent + children atomically.
   v_inserted := false;
   for v_attempt in 1..5 loop
-    v_booking_ref := 'JM-' || upper(substr(encode(gen_random_bytes(6), 'hex'), 1, 8));
+    v_booking_ref := 'JM-' || upper(substr(encode(extensions.gen_random_bytes(6), 'hex'), 1, 8));
     begin
       insert into public.bookings (
         customer_id, booking_reference, package_id, full_name, email, phone,
