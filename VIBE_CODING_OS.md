@@ -529,71 +529,45 @@ From the reverse-engineering spec — answer these before Step 10:
 **Rule:** where the spec, code and seed disagree (notice period, sign-in), the decision above is the source of truth — update all three in the same change so they can't drift again.
 
 ---
-## 10. Your first move
+## 10. Current state (updated 2026-11-23)
 
-Everything is prepared. One artifact is missing: the frozen contract.
+### What's done
 
-### What now exists
-
-| Artifact | Purpose | Status |
+| Step | State | Evidence |
 |---|---|---|
-| `AGENTS.md` | Rules every agent inherits: no client price, no two-request booking, no RLS weakening, no invented business rules | ✅ |
-| `.orca/specs/slice3-contract.md` | The Brain's task — the only thing standing between you and Run B | ✅ |
-| `.orca/specs/slice3-db.md` | `slice3-db` worker spec (freebuff) | ✅ |
-| `.orca/specs/slice3-web.md` | `slice3-web` worker spec (opencode) | ✅ |
-| `.orca/specs/review.md` | Read-only reviewer spec (codex) | ✅ |
-| `scripts/run-run-b.ps1` | Parallel launcher with precondition checks | ✅ |
-| `scripts/db-test.mjs` + `npm run test:db` | SQL test runner; rolls every test back | ✅ (unverified — no DB URL yet) |
-| `HANDOFF.md` | Resume state for any session or worker | ✅ |
-| `docs/adr/README.md` | ADR index | ✅ |
-| `SLICE_3_SPEC.md` | **The frozen contract** | ❌ **missing** |
+| Step 1 — baseline commit + branch | ✅ done | `c35bd07` on top of `6b370df` |
+| Step 2 — frozen contract | ✅ done | `SLICE_3_SPEC.md` v1.1.0 at `a98cd25` (7 gate corrections) |
+| Step 3 — build route completeness | ✅ done | `59b201d`, 16/16 pages, 63 modules |
+| Step 4 — atomic booking RPC | ✅ done | `database/05_booking_rpc.sql` at `02620eb` |
+| Step 5 — frontend rewire | ✅ done | `0e63608` cherry-picked, build green |
+| Step 6 — RLS access matrix | ✅ done | `docs/rls-access-matrix.md` |
+| Step 7 — review (Run C) | ▶ **running** | codex, dispatch `ctx_712dc6ff2182` |
+| Step 8 — verify (SQL tests) | ✅ **20/20 pass** | `npm run test:db` — all pass against staging DB |
+| Step 9 — docs | ✅ done | runbook, security audit, README, ADR, HANDOFF all updated |
 
-### Step 1 — the one thing to do
+### What's verified
 
-**Option A — one Orca command (no copy-paste):**
+- `npm run build` — ✅ 63 modules, 16/16 pages, ~0.9s
+- `npm run test:db` — ✅ **20/20 tests pass** against staging DB
+- Security audit — S3-01/S3-02/S3-05/S3-08 resolved; S3-03/S3-04/S3-06/S3-07 open
+- RPC review — Run C (codex) running, results pending
 
-```powershell
-orca orchestration worker-start --environment local --spec-file .orca/specs/slice3-contract.md --worktree current --agent antigravity
-```
+### What's next
 
-**Option B — paste into the Antigravity app:**
+1. **Run C results** — codex review of the merged diff. If it passes, Slice 3 is fully done.
+2. **S3-04 (admin search injection)** — highest-value open security finding. Focused code fix.
+3. **S3-03 (missing tables)** — `notifications` + `booking_cancellation_requests` + RLS.
+4. **Step 9 remaining** — `living-docs-governance`, `ck` save, `growth-log`, `agent-self-evaluation`.
+5. **Step 10 (ship)** — `production-audit`, `finishing-a-development-branch`.
 
-```text
-Read .orca/specs/slice3-contract.md and execute it exactly.
-Produce SLICE_3_SPEC.md and docs/adr/0001-atomic-booking-rpc.md.
-Do not edit application code.
-```
+### Freebuff children question
 
-That is the whole task. The spec file already carries the file list, the required contract, the error codes, the test list, the infrastructure constraint (no Docker/psql — tests must fit `npm run test:db`), and the "invent nothing, list unknowns" rule. You are not prompting from scratch.
+**Yes** — Freebuff supports subagents in two ways:
+1. **Model-level:** DeepSeek V4.1 Flash Fast auto-splits work across parallel subagents.
+2. **Orchestration-level:** Orca runs multiple Freebuff workers in parallel (each in its own worktree).
 
-### Step 2 — the gate, before you accept it
+Your 5/5 hours = daily free allowance. Models have multipliers (a 3× model burns 3 hours per session). Pick DeepSeek V4.1 Flash Fast if you want auto-subagents.
 
-Do not start Run B until all of these are true:
+### Infrastructure note
 
-- [ ] Input and output shapes are unambiguous — two developers would write the same RPC.
-- [ ] Exactly one price authority: the SQL function. Nothing in the payload can change the total.
-- [ ] Every error code has a user-facing message.
-- [ ] Every acceptance criterion is executable as a test in `database/tests/`.
-- [ ] "Open decisions" exists and contains no guess that a worker would have to resolve mid-implementation.
-
-Then: `git add SLICE_3_SPEC.md docs/adr && git commit -m "docs: freeze slice 3 booking contract"`. A frozen spec that is not committed will drift.
-
-### Step 3 — Run B (only after the gate passes)
-
-```powershell
-.\scripts\run-run-b.ps1
-```
-
-Confirm the Freebuff high window is open first — the script warns you, it cannot check the quota. Then **end your turn**; Orca wakes you when the workers report.
-
-### The one infrastructure gap
-
-There is no `supabase` CLI, no `docker`, and no `psql` on this machine, and `.env` has no `SUPABASE_DB_URL`. So the SQL tests can be **written** but not **executed** yet.
-
-To close it, add a direct connection string for a staging database to `.env`:
-
-```
-SUPABASE_DB_URL=postgresql://postgres.<ref>:<password>@<host>:5432/postgres
-```
-
-Then `npm run test:db -- --check` tells you immediately whether it works. Do not use the production database. If you cannot get a staging connection string, the honest fallback is: `slice3-db` writes the tests, marks them **unverified**, and Step 4's gate stays open — that is better than a green tick you cannot defend.
+`SUPABASE_DB_URL` is now set (staging). `npm run test:db` passes 20/20. The only remaining gap is the open security findings (S3-04, S3-06, S3-07) and the missing tables (S3-03).
