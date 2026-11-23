@@ -304,7 +304,17 @@ function mapRpcErrorToMessage(error) {
   return 'We could not submit your booking. Please try again or contact JMFoodies.';
 }
 
-async function submitBooking(e){e.preventDefault();if(!currentPackage)return notify('Please choose a package.',true);const f=new FormData(e.currentTarget),guests=Number(f.get('guest_count')),minimum=Number(currentPackage.minimum_guests||1);if(guests<minimum)return notify(`This package requires at least ${minimum} guests.`,true);
+async function submitBooking(e){
+  e.preventDefault();
+  const form = e.currentTarget;
+  if (!form.checkValidity()) {
+    form.reportValidity();
+    return;
+  }
+
+  if(!currentPackage)return notify('Please choose a package.',true);
+  const f=new FormData(form),guests=Number(f.get('guest_count')),minimum=Number(currentPackage.minimum_guests||1);
+  if(guests<minimum)return notify(`This package requires at least ${minimum} guests.`,true);
 
 const { data: rules, error: rulesError } = await supabase
   .from('package_categories')
@@ -314,18 +324,23 @@ const { data: rules, error: rulesError } = await supabase
 if (rulesError) return notify(rulesError.message, true);
 
 for (const rule of rules || []) {
-  if (!rule.is_required) continue;
-
   const selectedCount = [...selections].filter(id =>
     foodItems.some(item =>
       item.id === id && item.category_id === rule.category_id
     )
   ).length;
 
-  if (selectedCount !== Number(rule.selection_limit)) {
-    const categoryName =
-      categories.find(c => c.id === rule.category_id)?.name || 'Menu category';
+  const categoryName =
+    categories.find(c => c.id === rule.category_id)?.name || 'Menu category';
 
+  if (selectedCount > Number(rule.selection_limit)) {
+    return notify(
+      `You selected more items than allowed for ${categoryName}.`,
+      true
+    );
+  }
+
+  if (rule.is_required && selectedCount !== Number(rule.selection_limit)) {
     return notify(
       `Please select exactly ${rule.selection_limit} item(s) for ${categoryName}.`,
       true
