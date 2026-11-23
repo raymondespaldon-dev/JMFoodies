@@ -176,7 +176,7 @@ await shell(`<section class="pagehead"><p class="eyebrow">LET'S CELEBRATE</p><h1
  document.querySelectorAll('[data-mode]').forEach(b=>b.addEventListener('click',()=>{mode=b.dataset.mode;document.querySelectorAll('[data-mode]').forEach(x=>x.classList.toggle('active',x===b));renderMenu();}));
  document.querySelector('#bookingform [name=guest_count]').addEventListener('input',renderSummary);
  document.querySelector('#bookingform').addEventListener('submit',submitBooking);
- const id=new URLSearchParams(location.search).get('package');if(id){const el=document.querySelector(`[name=package][value="${CSS.escape(id)}"]`);if(el){el.checked=true;loadPackage(id);}}
+ const id=new URLSearchParams(location.search).get('package');if(id){const el=document.querySelector(`[name=package][value="${CSS.escape(id)}"]`);if(el){el.checked=true;loadPackage(id);}}enhanceSelects(document);
 }
 async function loadPackage(id){const {data,error}=await supabase.from('packages').select('*').eq('id',id).single();if(error)return notify(error.message,true);currentPackage=data;selections.clear();const {data:defaults}=await supabase.from('package_food_items').select('food_item_id').eq('package_id',id).eq('is_default',true);(defaults||[]).forEach(x=>selections.add(x.food_item_id));renderMenu();renderSummary();}
 function allowedFor(categoryId){return currentPackage?.package_categories?.find(x=>x.category_id===categoryId)?.selection_limit ?? 99;}
@@ -1417,7 +1417,8 @@ async function adminCancellationRequests() {
 
 
 function table(rows,cols){return `<div class="tablewrap"><table><thead><tr>${cols.map(c=>`<th>${c.replaceAll('_',' ')}</th>`).join('')}</tr></thead><tbody>${rows.map(r=>`<tr>${cols.map(c=>`<td>${esc(r[c])}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;}
-async function adminBookings(){if(!await requireAdmin())return;adminShell(`<p class="eyebrow">RESERVATIONS</p><h1>Booking management</h1><div class="toolbar"><input id="search" placeholder="Search reference, customer or event"><select id="filter"><option value="">All statuses</option>${['pending','under_review','approved','confirmed','rejected','cancelled','completed'].map(x=>`<option>${x}</option>`).join('')}</select></div><div id="rows">Loading…</div>`);async function load(){let q=supabase.from('bookings').select('*').order('created_at',{ascending:false}).limit(150);const status=document.querySelector('#filter').value;if(status)q=q.eq('status',status);const term=document.querySelector('#search').value.trim().replace(/[%_\\]/g,'\\\\$&');if(term)q=q.or(`booking_reference.ilike.%${term}%,full_name.ilike.%${term}%,event_name.ilike.%${term}%`);const {data,error}=await q;document.querySelector('#rows').innerHTML=error?esc(error.message):`<div class="tablewrap"><table><thead><tr><th>Reference</th><th>Customer</th><th>Event</th><th>Date</th><th>Guests</th><th>Total</th><th>Status</th><th>Update</th></tr></thead><tbody>${(data||[]).map(b=>`<tr><td>${esc(b.booking_reference)}</td><td>${esc(b.full_name)}</td><td>${esc(b.event_name)}</td><td>${esc(b.event_date)}</td><td>${b.guest_count}</td><td>${money(b.estimated_total)}</td><td>${esc(b.status)}</td><td><select data-status="${b.id}">${['pending','under_review','approved','confirmed','rejected','cancelled','completed'].map(s=>`<option ${b.status===s?'selected':''}>${s}</option>`).join('')}</select></td></tr>`).join('')}</tbody></table></div>`;document.querySelectorAll('[data-status]').forEach(el=>el.addEventListener('change',async()=>{const {error}=await supabase.from('bookings').update({status:el.value}).eq('id',el.dataset.status);notify(error?.message||'Booking status updated.',!!error);if(!error)load();}));}document.querySelector('#filter').addEventListener('change',load);document.querySelector('#search').addEventListener('input',()=>{clearTimeout(window._searchTimer);window._searchTimer=setTimeout(load,300)});load();}
+async function adminBookings(){if(!await requireAdmin())return;adminShell(`<p class="eyebrow">RESERVATIONS</p><h1>Booking management</h1><div class="toolbar"><input id="search" placeholder="Search reference, customer or event"><select id="filter"><option value="">All statuses</option>${['pending','under_review','approved','confirmed','rejected','cancelled','completed'].map(x=>`<option>${x}</option>`).join('')}</select></div><div id="rows">Loading…</div>`);async function load(){let q=supabase.from('bookings').select('*').order('created_at',{ascending:false}).limit(150);const status=document.querySelector('#filter').value;if(status)q=q.eq('status',status);const term=document.querySelector('#search').value.trim().replace(/[%_\\]/g,'\\\\$&');if(term)q=q.or(`booking_reference.ilike.%${term}%,full_name.ilike.%${term}%,event_name.ilike.%${term}%`);const {data,error}=await q;document.querySelector('#rows').innerHTML=error?esc(error.message):`<div class="tablewrap"><table><thead><tr><th>Reference</th><th>Customer</th><th>Event</th><th>Date</th><th>Guests</th><th>Total</th><th>Status</th><th>Update</th></tr></thead><tbody>${(data||[]).map(b=>`<tr><td>${esc(b.booking_reference)}</td><td>${esc(b.full_name)}</td><td>${esc(b.event_name)}</td><td>${esc(b.event_date)}</td><td>${b.guest_count}</td><td>${money(b.estimated_total)}</td><td>${esc(b.status)}</td><td><select data-status="${b.id}">${['pending','under_review','approved','confirmed','rejected','cancelled','completed'].map(s=>`<option ${b.status===s?'selected':''}>${s}</option>`).join('')}</select></td></tr>`).join('')}</tbody></table></div>`;document.querySelectorAll('[data-status]').forEach(el=>el.addEventListener('change',async()=>{const {error}=await supabase.from('bookings').update({status:el.value}).eq('id',el.dataset.status);notify(error?.message||'Booking status updated.',!!error);if(!error)load();}));enhanceSelects(document);}
+document.querySelector('#filter').addEventListener('change',load);document.querySelector('#search').addEventListener('input',()=>{clearTimeout(window._searchTimer);window._searchTimer=setTimeout(load,300)});load();}
 
 async function adminPackages() {
   if (!await requireAdmin()) return;
@@ -1567,6 +1568,7 @@ async function adminPackages() {
         </section>
       `;
     }).join('') || '<p>No packages found.</p>';
+    enhanceSelects(document);
   }
 
   // Add a new package
@@ -1874,6 +1876,7 @@ async function adminFood() {
     if (!data?.length) {
       list.innerHTML = '<p>No food items found.</p>';
     }
+    enhanceSelects(document);
   }
 
   // Add a new dish
