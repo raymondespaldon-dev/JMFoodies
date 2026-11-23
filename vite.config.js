@@ -4,5 +4,7 @@ export default defineConfig({ server: { port: 5173 }, build: { rollupOptions: { 
   track: 'track-booking.html', login: 'login.html', register: 'register.html',
   admin: 'admin/dashboard.html', adminBookings: 'admin/bookings.html',
   adminPackages: 'admin/packages.html', adminFood: 'admin/food-management.html',
-  adminReports: 'admin/reports.html', adminSettings: 'admin/settings.html'
+  adminReports: 'admin/reports.html', adminSettings: 'admin/settings.html',
+  adminCancellations: 'admin/cancellation-requests.html',
+  account: 'account.html', myBookings: 'my-bookings.html', notifications: 'notifications.html'
 }}}});
