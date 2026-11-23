@@ -1,30 +1,35 @@
+-- 05: a package_id that matches no row raises INVALID_PACKAGE.
 do $$
 declare
-  v_uid uuid := 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
+  v_uid uuid := 'a0000000-0000-4000-8000-000000000005';
 begin
-  insert into auth.users (id, email) values (v_uid, 'test@example.com') on conflict (id) do nothing;
-  insert into public.profiles (id, full_name, role) values (v_uid, 'Test Customer', 'customer') on conflict (id) do nothing;
-
-  perform set_config('request.jwt.claims', json_build_object('sub', v_uid, 'role', 'authenticated')::text, true);
+  perform set_config('request.jwt.claims',
+    json_build_object('sub', v_uid, 'role', 'authenticated')::text, true);
 
   begin
     perform public.create_booking(jsonb_build_object(
-      'package_id', gen_random_uuid(),
+      'package_id', 'b0000000-0000-4000-8000-00000000dead',
       'full_name', 'Maria Santos',
       'email', 'maria@example.com',
       'phone', '+63 917 123 4567',
-      'event_name', 'Chloe Birthday',
+      'event_name', 'Unknown Package Event',
       'event_type', 'Birthday',
-      'event_date', (current_date + interval '3 days')::date,
-      'event_time', '14:00',
+      'event_date', date '2099-06-05',
+      'event_time', '10:00',
       'venue', '123 Balete Drive',
       'guest_count', 40,
       'selected_food_item_ids', '[]'::jsonb
     ));
-    raise exception 'Assertion failed: invalid package should raise';
+    raise exception 'ASSERTION_FAILED: create_booking accepted an unknown package';
   exception when others then
-    if sqlstate <> 'P0010' or position('INVALID_PACKAGE:' in sqlerrm) = 0 then
+    if sqlerrm like 'ASSERTION_FAILED:%' then
       raise;
+    end if;
+    if sqlstate <> 'P0010' then
+      raise exception 'ASSERTION_FAILED: expected SQLSTATE P0010, got % (%)', sqlstate, sqlerrm;
+    end if;
+    if sqlerrm not like 'INVALID_PACKAGE:%' then
+      raise exception 'ASSERTION_FAILED: expected INVALID_PACKAGE, got %', sqlerrm;
     end if;
   end;
 end $$;

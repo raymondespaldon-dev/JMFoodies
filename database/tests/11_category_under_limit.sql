@@ -1,23 +1,29 @@
+-- 11: a required category must have exactly selection_limit items selected.
 do $$
 declare
-  v_uid uuid := 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
-  v_pkg uuid;
-  v_cat uuid;
-  v_food1 uuid;
+  v_uid uuid := 'a0000000-0000-4000-8000-000000000011';
+  v_pkg uuid := 'b0000000-0000-4000-8000-000000000011';
+  v_cat uuid := 'c0000000-0000-4000-8000-000000000011';
+  v_food uuid := 'd0000000-0000-4000-8000-000000000011';
 begin
-  insert into auth.users (id, email) values (v_uid, 'test@example.com') on conflict (id) do nothing;
-  insert into public.profiles (id, full_name, role) values (v_uid, 'Test Customer', 'customer') on conflict (id) do nothing;
-
-  select id into v_pkg from public.packages where name = 'Standard Package';
-  update public.packages set is_active = true where id = v_pkg;
-  select id into v_cat from public.food_categories where name = 'Chicken Dishes';
+  insert into auth.users (id, email) values (v_uid, 'slice3-test-11@example.com')
+    on conflict (id) do nothing;
+  insert into public.profiles (id, full_name) values (v_uid, 'Slice 3 Test Customer')
+    on conflict (id) do nothing;
+  insert into public.food_categories (id, name) values (v_cat, 'Slice3 Test Category 11')
+    on conflict (id) do nothing;
+  insert into public.food_items (id, category_id, name, extra_price, is_available)
+    values (v_food, v_cat, 'Slice3 Test Dish 11', 0, true)
+    on conflict (id) do nothing;
+  insert into public.packages (id, name, price_per_person, minimum_guests, is_active)
+    values (v_pkg, 'Slice3 Test Package 11', 350, 40, true)
+    on conflict (id) do nothing;
   insert into public.package_categories (package_id, category_id, selection_limit, is_required)
-  values (v_pkg, v_cat, 2, true)
-  on conflict (package_id, category_id) do update set selection_limit = 2, is_required = true;
+    values (v_pkg, v_cat, 2, true)
+    on conflict (package_id, category_id) do nothing;
 
-  select id into v_food1 from public.food_items where category_id = v_cat and is_available = true limit 1;
-
-  perform set_config('request.jwt.claims', json_build_object('sub', v_uid, 'role', 'authenticated')::text, true);
+  perform set_config('request.jwt.claims',
+    json_build_object('sub', v_uid, 'role', 'authenticated')::text, true);
 
   begin
     perform public.create_booking(jsonb_build_object(
@@ -25,18 +31,24 @@ begin
       'full_name', 'Maria Santos',
       'email', 'maria@example.com',
       'phone', '+63 917 123 4567',
-      'event_name', 'Chloe Birthday',
+      'event_name', 'Under Limit Event',
       'event_type', 'Birthday',
-      'event_date', (current_date + interval '3 days')::date,
-      'event_time', '14:00',
+      'event_date', date '2099-06-11',
+      'event_time', '10:00',
       'venue', '123 Balete Drive',
       'guest_count', 40,
-      'selected_food_item_ids', jsonb_build_array(v_food1::text)
+      'selected_food_item_ids', jsonb_build_array(v_food::text)
     ));
-    raise exception 'Assertion failed: required category mismatch should raise';
+    raise exception 'ASSERTION_FAILED: create_booking accepted 1 item for a required limit of 2';
   exception when others then
-    if sqlstate <> 'P0023' or position('MENU_REQUIRED_CATEGORY_MISMATCH:' in sqlerrm) = 0 then
+    if sqlerrm like 'ASSERTION_FAILED:%' then
       raise;
+    end if;
+    if sqlstate <> 'P0023' then
+      raise exception 'ASSERTION_FAILED: expected SQLSTATE P0023, got % (%)', sqlstate, sqlerrm;
+    end if;
+    if sqlerrm not like 'MENU_REQUIRED_CATEGORY_MISMATCH:%' then
+      raise exception 'ASSERTION_FAILED: expected MENU_REQUIRED_CATEGORY_MISMATCH, got %', sqlerrm;
     end if;
   end;
 end $$;

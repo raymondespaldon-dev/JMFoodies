@@ -1,47 +1,68 @@
+-- 15: duplicate food IDs are deduplicated, not rejected, and priced once.
 do $$
 declare
-  v_uid uuid := 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
-  v_pkg uuid;
-  v_cat uuid;
-  v_food uuid;
+  v_uid uuid := 'a0000000-0000-4000-8000-000000000015';
+  v_pkg uuid := 'b0000000-0000-4000-8000-000000000015';
+  v_cat uuid := 'c0000000-0000-4000-8000-000000000015';
+  v_food uuid := 'd0000000-0000-4000-8000-000000000015';
   v_result jsonb;
   v_booking_id uuid;
   v_item_count integer;
+  v_stored_extra numeric(10,2);
+  v_stored_total numeric(12,2);
 begin
-  insert into auth.users (id, email) values (v_uid, 'test@example.com') on conflict (id) do nothing;
-  insert into public.profiles (id, full_name, role) values (v_uid, 'Test Customer', 'customer') on conflict (id) do nothing;
-
-  select id into v_pkg from public.packages where name = 'Standard Package';
-  update public.packages set is_active = true where id = v_pkg;
-  select id into v_cat from public.food_categories where name = 'Chicken Dishes';
+  insert into auth.users (id, email) values (v_uid, 'slice3-test-15@example.com')
+    on conflict (id) do nothing;
+  insert into public.profiles (id, full_name) values (v_uid, 'Slice 3 Test Customer')
+    on conflict (id) do nothing;
+  insert into public.food_categories (id, name) values (v_cat, 'Slice3 Test Category 15')
+    on conflict (id) do nothing;
+  insert into public.food_items (id, category_id, name, extra_price, is_available)
+    values (v_food, v_cat, 'Slice3 Test Dish 15', 25.00, true)
+    on conflict (id) do nothing;
+  insert into public.packages (id, name, price_per_person, minimum_guests, is_active)
+    values (v_pkg, 'Slice3 Test Package 15', 300, 40, true)
+    on conflict (id) do nothing;
   insert into public.package_categories (package_id, category_id, selection_limit, is_required)
-  values (v_pkg, v_cat, 1, true)
-  on conflict (package_id, category_id) do update set selection_limit = 1, is_required = true;
-  select id into v_food from public.food_items where category_id = v_cat and is_available = true limit 1;
-  if v_food is null then
-    insert into public.food_items (category_id, name, extra_price, is_available)
-    values (v_cat, 'Test Chicken', 0, true) returning id into v_food;
-  end if;
+    values (v_pkg, v_cat, 1, true)
+    on conflict (package_id, category_id) do nothing;
 
-  perform set_config('request.jwt.claims', json_build_object('sub', v_uid, 'role', 'authenticated')::text, true);
+  perform set_config('request.jwt.claims',
+    json_build_object('sub', v_uid, 'role', 'authenticated')::text, true);
 
   v_result := public.create_booking(jsonb_build_object(
     'package_id', v_pkg,
     'full_name', 'Maria Santos',
     'email', 'maria@example.com',
     'phone', '+63 917 123 4567',
-    'event_name', 'Chloe Birthday',
+    'event_name', 'Duplicate Selection Event',
     'event_type', 'Birthday',
-    'event_date', (current_date + interval '3 days')::date,
-    'event_time', '19:00',
+    'event_date', date '2099-06-15',
+    'event_time', '10:00',
     'venue', '123 Balete Drive',
     'guest_count', 40,
-    'selected_food_item_ids', jsonb_build_array(v_food::text, v_food::text)
+    'selected_food_item_ids',
+      jsonb_build_array(v_food::text, v_food::text, v_food::text)
   ));
 
   v_booking_id := (v_result->>'booking_id')::uuid;
+
   select count(*) into v_item_count from public.booking_food_items where booking_id = v_booking_id;
   if v_item_count <> 1 then
-    raise exception 'Assertion failed: expected 1 item after dedup, got %', v_item_count;
+    raise exception 'ASSERTION_FAILED: expected the dish once, got % row(s)', v_item_count;
+  end if;
+
+  select extra_price_per_person, estimated_total
+    into v_stored_extra, v_stored_total
+    from public.bookings where id = v_booking_id;
+  if v_stored_extra <> 25.00 then
+    raise exception 'ASSERTION_FAILED: extra counted more than once: %', v_stored_extra;
+  end if;
+  if v_stored_total <> (300.00 + 25.00) * 40 then
+    raise exception 'ASSERTION_FAILED: total reflects duplicates: %', v_stored_total;
+  end if;
+  if (v_result->>'extra_price_per_person')::numeric <> 25.00 then
+    raise exception 'ASSERTION_FAILED: returned extra reflects duplicates: %',
+      v_result->>'extra_price_per_person';
   end if;
 end $$;

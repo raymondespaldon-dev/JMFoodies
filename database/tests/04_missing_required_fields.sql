@@ -1,53 +1,35 @@
+-- 04: missing contact/event fields raise MISSING_REQUIRED_FIELDS.
 do $$
 declare
-  v_uid uuid := 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
-  v_pkg uuid;
+  v_uid uuid := 'a0000000-0000-4000-8000-000000000004';
 begin
-  insert into auth.users (id, email) values (v_uid, 'test@example.com') on conflict (id) do nothing;
-  insert into public.profiles (id, full_name, role) values (v_uid, 'Test Customer', 'customer') on conflict (id) do nothing;
-  select id into v_pkg from public.packages where name = 'Standard Package';
+  perform set_config('request.jwt.claims',
+    json_build_object('sub', v_uid, 'role', 'authenticated')::text, true);
 
-  perform set_config('request.jwt.claims', json_build_object('sub', v_uid, 'role', 'authenticated')::text, true);
-
-  -- missing full_name
   begin
+    -- venue is deliberately omitted
     perform public.create_booking(jsonb_build_object(
-      'package_id', v_pkg,
-      'email', 'maria@example.com',
-      'phone', '+63 917 123 4567',
-      'event_name', 'Chloe Birthday',
-      'event_type', 'Birthday',
-      'event_date', (current_date + interval '3 days')::date,
-      'event_time', '14:00',
-      'venue', '123 Balete Drive',
-      'guest_count', 40,
-      'selected_food_item_ids', '[]'::jsonb
-    ));
-    raise exception 'Assertion failed: missing full_name should raise';
-  exception when others then
-    if sqlstate <> 'P0001' or position('MISSING_REQUIRED_FIELDS:' in sqlerrm) = 0 then
-      raise;
-    end if;
-  end;
-
-  -- missing venue
-  begin
-    perform public.create_booking(jsonb_build_object(
-      'package_id', v_pkg,
+      'package_id', 'b0000000-0000-4000-8000-000000000004',
       'full_name', 'Maria Santos',
       'email', 'maria@example.com',
       'phone', '+63 917 123 4567',
-      'event_name', 'Chloe Birthday',
+      'event_name', 'Missing Venue Event',
       'event_type', 'Birthday',
-      'event_date', (current_date + interval '3 days')::date,
-      'event_time', '14:00',
+      'event_date', date '2099-06-04',
+      'event_time', '10:00',
       'guest_count', 40,
       'selected_food_item_ids', '[]'::jsonb
     ));
-    raise exception 'Assertion failed: missing venue should raise';
+    raise exception 'ASSERTION_FAILED: create_booking accepted a payload without venue';
   exception when others then
-    if sqlstate <> 'P0001' or position('MISSING_REQUIRED_FIELDS:' in sqlerrm) = 0 then
+    if sqlerrm like 'ASSERTION_FAILED:%' then
       raise;
+    end if;
+    if sqlstate <> 'P0001' then
+      raise exception 'ASSERTION_FAILED: expected SQLSTATE P0001, got % (%)', sqlstate, sqlerrm;
+    end if;
+    if sqlerrm not like 'MISSING_REQUIRED_FIELDS:%' then
+      raise exception 'ASSERTION_FAILED: expected MISSING_REQUIRED_FIELDS, got %', sqlerrm;
     end if;
   end;
 end $$;

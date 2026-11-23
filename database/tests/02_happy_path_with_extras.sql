@@ -1,53 +1,80 @@
+-- 02: happy path where selected dishes carry extra per-person charges.
 do $$
 declare
-  v_uid uuid := 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
-  v_pkg uuid;
-  v_cat uuid;
-  v_food uuid;
-  v_extra numeric(10,2);
-  v_base numeric(10,2);
-  v_guests integer := 40;
+  v_uid uuid := 'a0000000-0000-4000-8000-000000000002';
+  v_pkg uuid := 'b0000000-0000-4000-8000-000000000002';
+  v_cat1 uuid := 'c0000000-0000-4000-8000-000000000002';
+  v_cat2 uuid := 'c0000000-0000-4000-8000-000000000012';
+  v_food1 uuid := 'd0000000-0000-4000-8000-000000000002';
+  v_food2 uuid := 'd0000000-0000-4000-8000-000000000012';
   v_result jsonb;
   v_booking_id uuid;
+  v_item_count integer;
+  v_stored_extra numeric(10,2);
+  v_stored_total numeric(12,2);
+  v_expected_extra numeric(10,2) := 30.00 + 80.00;
+  v_expected_final numeric(10,2) := 300.00 + 30.00 + 80.00;
 begin
-  insert into auth.users (id, email) values (v_uid, 'test@example.com') on conflict (id) do nothing;
-  insert into public.profiles (id, full_name, role) values (v_uid, 'Test Customer', 'customer') on conflict (id) do nothing;
+  insert into auth.users (id, email) values (v_uid, 'slice3-test-02@example.com')
+    on conflict (id) do nothing;
+  insert into public.profiles (id, full_name) values (v_uid, 'Slice 3 Test Customer')
+    on conflict (id) do nothing;
+  insert into public.food_categories (id, name) values
+    (v_cat1, 'Slice3 Test Chicken 02'),
+    (v_cat2, 'Slice3 Test Seafood 02')
+    on conflict (id) do nothing;
+  insert into public.food_items (id, category_id, name, extra_price, is_available) values
+    (v_food1, v_cat1, 'Slice3 Test Chicken Dish 02', 30.00, true),
+    (v_food2, v_cat2, 'Slice3 Test Shrimp Dish 02', 80.00, true)
+    on conflict (id) do nothing;
+  insert into public.packages (id, name, price_per_person, minimum_guests, is_active)
+    values (v_pkg, 'Slice3 Test Package 02', 300, 30, true)
+    on conflict (id) do nothing;
+  insert into public.package_categories (package_id, category_id, selection_limit, is_required) values
+    (v_pkg, v_cat1, 1, true),
+    (v_pkg, v_cat2, 1, true)
+    on conflict (package_id, category_id) do nothing;
 
-  select id, price_per_person into v_pkg, v_base from public.packages where name = 'Standard Package';
-  update public.packages set is_active = true where id = v_pkg;
-
-  select id into v_cat from public.food_categories where name = 'Seafood';
-  insert into public.package_categories (package_id, category_id, selection_limit, is_required)
-  values (v_pkg, v_cat, 1, true)
-  on conflict (package_id, category_id) do update set selection_limit = 1, is_required = true;
-
-  select id, extra_price into v_food, v_extra from public.food_items where category_id = v_cat and extra_price > 0 and is_available = true limit 1;
-  if v_food is null then
-    insert into public.food_items (category_id, name, extra_price, is_available)
-    values (v_cat, 'Extra Shrimp', 80, true) returning id, extra_price into v_food, v_extra;
-  end if;
-
-  perform set_config('request.jwt.claims', json_build_object('sub', v_uid, 'role', 'authenticated')::text, true);
+  perform set_config('request.jwt.claims',
+    json_build_object('sub', v_uid, 'role', 'authenticated')::text, true);
 
   v_result := public.create_booking(jsonb_build_object(
     'package_id', v_pkg,
-    'full_name', 'Maria Santos',
-    'email', 'maria@example.com',
-    'phone', '+63 917 123 4567',
-    'event_name', 'Chloe Birthday',
-    'event_type', 'Birthday',
-    'event_date', (current_date + interval '3 days')::date,
-    'event_time', '15:00',
-    'venue', '123 Balete Drive',
-    'guest_count', v_guests,
-    'selected_food_item_ids', jsonb_build_array(v_food::text)
+    'full_name', 'Juan Dela Cruz',
+    'email', 'juan@example.com',
+    'phone', '+63 918 555 0101',
+    'event_name', 'Family Reunion',
+    'event_type', 'Reunion',
+    'event_date', date '2099-06-02',
+    'event_time', '11:30',
+    'venue', '45 Katipunan Avenue',
+    'guest_count', 35,
+    'selected_food_item_ids', jsonb_build_array(v_food1::text, v_food2::text)
   ));
 
-  v_booking_id := (v_result->>'booking_id')::uuid;
-  if (v_result->>'extra_price_per_person')::numeric <> v_extra then
-    raise exception 'Assertion failed: extra_price_per_person % != %', v_result->>'extra_price_per_person', v_extra;
+  if (v_result->>'extra_price_per_person')::numeric <> v_expected_extra then
+    raise exception 'ASSERTION_FAILED: extra_price_per_person % != sum of extras %',
+      v_result->>'extra_price_per_person', v_expected_extra;
   end if;
-  if (v_result->>'estimated_total')::numeric <> (v_base + v_extra) * v_guests then
-    raise exception 'Assertion failed: estimated_total mismatch';
+  if (v_result->>'final_price_per_person')::numeric <> v_expected_final then
+    raise exception 'ASSERTION_FAILED: final_price_per_person % != base + extras %',
+      v_result->>'final_price_per_person', v_expected_final;
+  end if;
+
+  v_booking_id := (v_result->>'booking_id')::uuid;
+  select extra_price_per_person, estimated_total
+    into v_stored_extra, v_stored_total
+    from public.bookings where id = v_booking_id;
+  if v_stored_extra <> v_expected_extra then
+    raise exception 'ASSERTION_FAILED: stored extra % != expected %', v_stored_extra, v_expected_extra;
+  end if;
+  if v_stored_total <> v_expected_final * 35 then
+    raise exception 'ASSERTION_FAILED: stored total % != (base + extras) * guests %',
+      v_stored_total, v_expected_final * 35;
+  end if;
+
+  select count(*) into v_item_count from public.booking_food_items where booking_id = v_booking_id;
+  if v_item_count <> 2 then
+    raise exception 'ASSERTION_FAILED: expected 2 booking_food_items rows, got %', v_item_count;
   end if;
 end $$;
