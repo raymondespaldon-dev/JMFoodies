@@ -5,7 +5,7 @@
 **Updated:** 2026-11-23
 **Branch:** `feat/booking-hardening`
 **Current slice:** Slice 3 — secure booking core
-**Status:** blocked on the frozen contract (`SLICE_3_SPEC.md` does not exist yet)
+**Status:** contract frozen (`a98cd25`); `slice3-web` running; `slice3-db` waiting on the Freebuff window
 
 ---
 
@@ -16,20 +16,34 @@
 | Step 1 — baseline commit + branch | ✅ done | `c35bd07` on top of `6b370df` |
 | Step 3 — build route completeness | ✅ done | `59b201d`, 16/16 pages, 63 modules |
 | Docs correction (Freebuff role, Orca agents) | ✅ done | `85b6e12` |
-| Slice 3 contract | ❌ **not written** | `SLICE_3_SPEC.md` missing |
+| Slice 3 contract | ✅ **frozen** | `SLICE_3_SPEC.md` v1.1.0 at `a98cd25` — 7 gate corrections, see spec §9 |
+| ADR 0001 | ✅ accepted | `docs/adr/0001-atomic-booking-rpc.md` |
+| `slice3-web` worker | ▶ **running** | dispatch `ctx_f7ccefe6b157`, `opencode/beam-free`, worktree `.../JMFoodies/slice3-web` (kept open) |
+| `slice3-db` worker | ⏸ **not started** | needs the Freebuff high window confirmed first |
 | Slice 2 RLS verification | ❌ not tested | no `database/tests/` yet |
-| Slice 3 implementation | ❌ not started | no `create_booking` RPC |
+| Slice 3 implementation | ⏳ in progress | `create_booking` RPC not written yet |
 
 ## What is next
 
-1. **Run Orca Run A** — one worker, agent `antigravity`, spec `.orca/specs/slice3-contract.md`.
-   Produces `SLICE_3_SPEC.md` + `docs/adr/0001-atomic-booking-rpc.md`.
-2. **Check the gate**, then freeze it. Workers may not change a frozen spec.
-3. **Run Orca Run B** — `.\scripts\run-run-b.ps1`.
-   - `slice3-db` → `freebuff` (DeepSeek V4.1 Flash high, 2h window) — RPC + SQL tests
-   - `slice3-web` → `opencode` — rewire `submitBooking` to one RPC call
-4. **Run Orca Run C** — reviewer (`codex`), spec `.orca/specs/review.md`, read-only.
-5. Then Step 6 (RLS access matrix), Step 7 (review), Step 8 (verify), Step 9 (docs).
+1. ✅ **Run A done** — contract frozen at `a98cd25`.
+2. ▶ **`slice3-web` running** — rewiring `submitBooking` to one `create_booking` call.
+3. ⏸ **Start `slice3-db`** once the Freebuff high window is confirmed:
+
+   ```powershell
+   orca orchestration worker-start --environment local --spec-file .orca/specs/slice3-db.md --worktree new-child --name slice3-db --agent freebuff
+   ```
+   Without `SUPABASE_DB_URL` it writes the 18 test files but cannot run them — treat that result as **unverified**, not green.
+4. **Run C** — reviewer (`codex`), `.orca/specs/review.md`, read-only. The RPC is where Codex's scarce quota earns its cost.
+5. Then merge the two worker branches, Step 6 (RLS access matrix), Step 8 (verify), Step 9 (docs).
+
+## Gate findings from Run A (already fixed — do not reintroduce)
+
+The Brain's v1.0.0 spec was good but had seven defects. All are corrected in v1.1.0; spec §9 lists them. The two that mattered most:
+
+- **Test 03 was proving nothing.** It asserted SQLSTATE `42501` for "unauthenticated", but a role lacking `EXECUTE` gets the same `42501`, so the `auth.uid()` guard was never exercised. Now split into 03a (grant boundary), 03b (guard), 03c (identity binding).
+- **Test 13 could not test atomicity.** It used an invalid food UUID as the failure, but UUID validation runs *before* any insert — the parent was never written, so nothing was proven. Now injects the failure *after* the parent insert with a temporary trigger.
+
+Also: `booking_reference` uniqueness must be handled by catching `unique_violation` and retrying, **not** a pre-insert `select` (TOCTOU). And the existing `booking_status_log` trigger already writes `booking_status_history` on insert — the RPC must not double-log.
 
 ## Decisions already made (source of truth)
 
