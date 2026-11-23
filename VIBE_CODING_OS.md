@@ -84,8 +84,8 @@ Commit baseline → Freeze Slice 3 contract → Finish Slice 1 routes
 | **OpenCode** | This session; 10 free models + subagents | `opencode/deepseek-v4.1-flash-free`, `beam-free`, `big-pickle`, `flint-40b-free`, `hy4-flash-free`, `iceman-free`, `mimo-v2.6-flash-free`, `nemotron-3.5-lightning-free`, `nemotron-3.5-super-vl-free`, `tidepool-alpha-free` | **Hands** — code, tests, docs, commands |
 | **Antigravity** | Separate app/CLI with own quota | Standard (5h/day): Beam 1.0, DeepSeek V4.1 Flash Slow, Nemotron 3.5 Lightning, Glyph Cluster, Solar Pro 4 / Mini 4. Premium (1–2h/day): DeepSeek V4.1 Flash high | **Brain** — planning, architecture, hard debugging, security |
 | **Codex** | Separate CLI; drains fast | Your Codex account quota | **Brain / final reviewer**, used sparingly |
-| **Freebuff** | Separate CLI (`freebuff.exe`, manicode) | Free models | **Emergency hands / second opinion** |
-| **Orca** | Orchestrator, v1.4.271, running | Agents: `codex`, `antigravity`, `opencode` | **Control plane** — parallel workers in worktrees |
+| **Freebuff** | Separate CLI (`freebuff.exe`, manicode). **Unlimited prompts, hour-limited windows** — the quota is time, not tokens | DeepSeek V4.1 Flash **high (2h window)**, DeepSeek V4.1 Flash **low (1h window)**, plus other models | **Primary heavy-execution lane** — the big code block of a slice, run inside a window |
+| **Orca** | Orchestrator, v1.4.271, running | Agents (verified via `orca agent installed`): `claude`, `codex`, `opencode`, `opencode2`, `antigravity`, **`freebuff`** | **Control plane** — parallel workers in worktrees |
 
 ### The hard truth about "auto reroute"
 
@@ -99,25 +99,75 @@ So "auto reroute" is done at the **Orca layer**, not inside OpenCode:
 
 Manual fallback inside OpenCode is `/models`. A custom plugin could watch session errors and switch models, but that is experimental — do not depend on it.
 
+Note the distinction that matters: they are not OpenCode *providers*, but Freebuff, Codex, Antigravity, Claude and OpenCode2 are all Orca *agents*. So a harness that cannot be a provider in OpenCode can still be a full worker in Orca — `--agent freebuff` is valid.
+
 ### Routing table
 
 | Work type | Who | First choice | Fallback |
 |---|---|---|---|
 | Product/requirements, architecture, ADR, slice contract | **Brain** | Antigravity `Beam 1.0 · high` | Antigravity `DeepSeek V4.1 Flash · high` → `Glyph Cluster · high` → Codex |
 | Hard bug / security review | **Brain** | Codex | Antigravity `Beam 1.0 · high` |
-| Implement approved slice, tests, refactor, docs | **Hands** | `opencode/deepseek-v4.1-flash-free` | `opencode/beam-free` → `opencode/big-pickle` → `opencode/nemotron-3.5-lightning-free` → `opencode/mimo-v2.6-flash-free` → `opencode/flint-40b-free` → `opencode/hy4-flash-free` → `opencode/iceman-free` → `opencode/tidepool-alpha-free` |
+| **Bulk slice implementation (window open)** | **Primary Hands** | **Freebuff `DeepSeek V4.1 Flash · high`** (2h window) | Freebuff `DeepSeek V4.1 Flash · low` (1h window) |
+| Any edit, anytime, no window | **Always-on Hands** | `opencode/deepseek-v4.1-flash-free` | `opencode/beam-free` → `opencode/big-pickle` → `opencode/nemotron-3.5-lightning-free` → `opencode/mimo-v2.6-flash-free` → `opencode/flint-40b-free` → `opencode/hy4-flash-free` → `opencode/iceman-free` → `opencode/tidepool-alpha-free` |
 | UI/screenshot inspection | **Eyes** | `opencode/nemotron-3.5-super-vl-free` (vision) + Playwright | Brain for judgement |
 | Lint/format/mechanical | **Hands** | `opencode/flint-40b-free` | any free model |
 | Final code review | **Reviewer** | Antigravity standard (`Solar Pro 4` / `Nemotron`) | Codex |
 
 **Budget rule:** the Brain never writes bulk code; the Hands never invent architecture. If the Hands get stuck twice on the same error, escalate to the Brain with the error + diff, not a blank prompt.
 
+### Freebuff is a burst lane, not a backup
+
+Freebuff's quota is **time-boxed, not token-boxed**: unlimited prompts inside the window. That inverts the economics — the marginal cost of prompt #40 is **zero**, so the only thing you are spending is the clock. The rational strategy is therefore *not* "save it for emergencies". It is **maximise completed work per window**.
+
+That changes the ranking of your whole system:
+
+| Harness | Quota shape | Correct use |
+|---|---|---|
+| Freebuff | Unlimited prompts, N hours | **Fill the window with execution.** One slice per window. |
+| OpenCode free | Unlimited, always on, weaker models | Small edits, tests, docs, verification runs — the always-on lane |
+| Antigravity | 5h/day + 1–2h premium | **Scarce.** Minutes per day, spent on decisions only |
+| Codex | Drains fast | **Scarce.** Hard security/correctness review only |
+
+So Freebuff outranks OpenCode for volume work *while a window is open*, and Antigravity/Codex outrank everything for *judgement*. Neither replaces the other.
+
+#### The trap: unlimited prompts ≠ one 5-hour session
+
+Long single sessions rot. The agent re-reads a huge context every turn, drifts off the spec, and starts "improving" things you froze. Unlimited prompting is a licence to do **many short, verifiable tasks**, not one endless one. Reset the session between slices and resume from `HANDOFF.md`.
+
+#### The window protocol
+
+The window's most expensive seconds are the first ones. Do all of this **before** you open it:
+
+1. Spec frozen (`SLICE_3_SPEC.md`) — the window must not contain a single design decision.
+2. Failing tests already written, by OpenCode, so the window starts with a red test.
+3. `HANDOFF.md` written — files to touch, commands to run, done-criteria.
+4. Branch clean; `.env` untouched.
+5. One file-set for that worker. No shared files with any parallel worker.
+
+Then, inside the window:
+
+```
+implement smallest step → run the test → commit → next step
+```
+
+Commit every green step. If the window dies mid-task, the next harness resumes from the last commit, not from zero.
+
+#### Window budget (your actual numbers)
+
+| Window | Reserve it for |
+|---|---|
+| DeepSeek V4.1 Flash **high — 2h** | The hardest execution block of the project. For you: **Slice 3** — `create_booking` RPC + frontend rewire + SQL tests. |
+| DeepSeek V4.1 Flash **low — 1h** | Bulk mechanical work: test scaffolding, RLS check scripts, docs, refactors, formatting. |
+| Remaining hours | Review and verification passes, and a second independent look at the diff. |
+
+Do **not** spend the high window on planning. Planning is Antigravity's job and costs minutes; the window costs the scarcest resource you have.
+
 ### The switch protocol (use this every time a limit hits)
 
 1. **Stop.** Do not retry the same call blindly.
 2. **Write `HANDOFF.md`** — current slice, what is done, what is next, files touched, failing command, decisions made.
 3. **Save the tree** — `git add -A && git commit -m "wip: <slice>"` on a `wip/<slice>` branch, or `git stash push -m "<slice>"`.
-4. **Switch** — `/models` in OpenCode, or start an Orca worker with the next agent.
+4. **Switch** — `/models` in OpenCode, or start an Orca worker with the next agent. If OpenCode's free models start throttling, that is the moment to open a Freebuff window: unlimited prompts buy you out of a per-model rate limit entirely.
 5. **Resume with the handoff**, not with the original chat. Say: *"Read HANDOFF.md and the spec. Continue from step N. Do not re-plan."*
 
 ---
@@ -162,23 +212,31 @@ Placement: this machine (local), the user named it.
 
 **Gate:** spec has an input/output contract, price authority, error codes, and tests. Freeze it — workers may not change it.
 
-### Run B — Three parallel workers (new-child worktrees)
+### Run B — Two parallel workers (new-child worktrees)
+
+`slice1-build` is **retired** — the four routes were fixed in `59b201d`. Running that worker now would be a stale task.
 
 | Worker | Agent | Owns | Deliverable |
 |---|---|---|---|
-| `slice3-db` | `codex` (SQL correctness matters) | `database/05_booking_rpc.sql`, `database/tests/booking_rpc.sql` | RPC + SQL tests |
-| `slice3-web` | `opencode` | `src/main.js` `submitBooking`, `src/supabase.js` | UI calls RPC only |
-| `slice1-build` | `opencode` | `vite.config.js` | 4 missing routes in build |
+| `slice3-db` | **`freebuff`** (`DeepSeek V4.1 Flash · high`) | `database/05_booking_rpc.sql`, `database/tests/booking_rpc.sql` | RPC + SQL tests |
+| `slice3-web` | `opencode` (`deepseek-v4.1-flash-free`) | `src/main.js` `submitBooking`, `src/supabase.js` | UI calls RPC only |
 
-`slice1-build` is independent and can start immediately. `slice3-db` and `slice3-web` both follow the frozen contract, so they can run in parallel.
+Why this allocation, and not Codex on the SQL:
 
-PowerShell parallel start (from Orca's own parallel-start reference):
+- The RPC + its test file is the **largest, most iterative** block in the project — several rounds of write → run → fix. That is exactly what a time-boxed unlimited-prompt window is for. Freebuff is the right owner, not the backup.
+- The frontend rewire is ~40 lines. Wasting a scarce Brain hour or a window hour on it is a bad trade; OpenCode's always-on lane is enough.
+- **Codex's scarce quota is better spent reviewing the RPC than writing it.** Authoring costs far more tokens than auditing, and the thing you need Codex's intelligence for is catching a price-authority hole — which is a read, not a write. That is Step 7, not Step 4.
+
+Both workers follow the frozen contract, so they run in parallel. They must not touch the same files.
+
+PowerShell parallel start:
 
 ```powershell
 $d = New-Item -ItemType Directory -Path (Join-Path $env:TEMP ([guid]::NewGuid()))
-$starts = foreach ($n in 'slice3-db','slice3-web','slice1-build') {
+$map = @{ 'slice3-db' = 'freebuff'; 'slice3-web' = 'opencode' }
+$starts = foreach ($n in $map.Keys) {
   $p = Start-Process -FilePath 'orca' -NoNewWindow -PassThru -WorkingDirectory (Get-Location) `
-    -ArgumentList "orchestration worker-start --environment local --spec-file .orca/specs/$n.md --worktree new-child --name $n --agent $(if($n -eq 'slice3-db'){'codex'}else{'opencode'})" `
+    -ArgumentList "orchestration worker-start --environment local --spec-file .orca/specs/$n.md --worktree new-child --name $n --agent $($map[$n])" `
     -RedirectStandardOutput "$d\$n.out" -RedirectStandardError "$d\$n.err"
   $null = $p.Handle
   [pscustomobject]@{ Name = $n; Process = $p }
@@ -186,6 +244,8 @@ $starts = foreach ($n in 'slice3-db','slice3-web','slice1-build') {
 foreach ($s in $starts) { $s.Process.WaitForExit(); "$($s.Name) exit $($s.Process.ExitCode)" }
 Get-ChildItem $d | ForEach-Object { "== $($_.Name)"; Get-Content $_.FullName }
 ```
+
+**Before you launch `slice3-db`, confirm the Freebuff high window is actually open** (`freebuff` status / the app's quota panel). Starting that worker outside the window wastes the Orca readiness handshake and leaves a dead worker you have to clean up.
 
 Then **end your turn**. Orca wakes you when workers report. Do not poll.
 
@@ -260,7 +320,7 @@ Each step lists **Skill → Agent/Model → Prompt → Output → Gate**.
 ### Step 4 — Implement the atomic booking RPC (test-first)
 
 - **Skills:** `test-driven-development` → `tdd-workflow` → `error-handling`
-- **Agent/Model:** Brain/Hands split — codex or Antigravity writes the SQL; `opencode/deepseek-v4.1-flash-free` writes tests and scaffolding
+- **Agent/Model:** Primary Hands — **Freebuff `DeepSeek V4.1 Flash · high`** inside its 2h window. `opencode/deepseek-v4.1-flash-free` writes the test scaffolding first so the window opens with a red test.
 - **Orca:** Run B `slice3-db`.
 - **Prompt:**
   > Implement `SLICE_3_SPEC.md` exactly. Create `database/05_booking_rpc.sql` with `public.create_booking(payload jsonb)`:
@@ -303,7 +363,7 @@ Each step lists **Skill → Agent/Model → Prompt → Output → Gate**.
 ### Step 7 — Review
 
 - **Skills:** `requesting-code-review` → `code-review` (CodeRabbit CLI) → `receiving-code-review`
-- **Agent/Model:** Reviewer — Antigravity/Codex; fixes by Hands
+- **Agent/Model:** Reviewer — **Codex first** (this is where its scarce quota earns its cost: it is reading ~300 lines to find a price-authority hole, not authoring), then Antigravity standard as second pass; fixes by Hands
 - **Prompt:**
   > Review the branch `feat/booking-hardening` against `SLICE_3_SPEC.md`. Report findings as P0 (data loss/security), P1 (correctness), P2 (quality) with file:line. Specifically check: server-side price authority, atomicity, RLS, error handling, secret leakage, and whether any UI path can bypass validation. Do not implement fixes in this pass.
 - **Gate:** zero open P0/P1; P2s triaged.
